@@ -1,5 +1,5 @@
-#ifndef LLVM_TRANSFORMS_NEWPASSTEST_NEWPASSTEST_H
-#define LLVM_TRANSFORMS_NEWPASSTEST_NEWPASSTEST_H
+#ifndef LLVM_TRANSFORMS_CHCTRANSFORM_CHCTRANSFORM_H
+#define LLVM_TRANSFORMS_CHCTRANSFORM_CHCTRANSFORM_H
 
 #include "llvm/IR/PassManager.h"
 
@@ -13,11 +13,11 @@ struct MyBasicBlock {
   std::vector<BasicBlock *> succs;
 };
 
-class CHCTransform : public PassInfoMixin<NewPassTest> {
+class CHCTransformPass : public PassInfoMixin<CHCTransformPass> {
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
 } // namespace llvm
 
-#endif // LLVM_TRANSFORMS_NEWPASSTEST_NEWPASSTEST_H
+#endif // LLVM_TRANSFORMS_CHCTRANSFORM_CHCTRANSFORM_H

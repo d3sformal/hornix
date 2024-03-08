@@ -1,9 +1,8 @@
-# Ignore everything
+llvm-project/
 llvm-project/*
 
-# But not these files...
-!.gitignore
-!./README.md
-!./llvm-project/llvm/include/Transform/Utils/CHCTransform.h
-!./llvm-project/llvm/lib/Transforms/Utils/CHCTransform.cpp
+! .gitignore
+! ./README.md
+! llvm-project/llvm/include/Transform/Utils/CHCTransform.h
+! llvm-project/llvm/lib/Transforms/Utils/CHCTransform.cpp
 

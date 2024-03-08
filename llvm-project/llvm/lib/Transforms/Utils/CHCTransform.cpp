@@ -111,7 +111,7 @@ void PrintInfo(std::unordered_map<std::string, MyBasicBlock> my_blocks) {
   }
 }
 
-PreservedAnalyses CHCTransform::run(Function &F,
+PreservedAnalyses CHCTransformPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
   
   auto my_blocks = LoadBasicBlockInfo(F);
