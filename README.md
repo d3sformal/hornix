@@ -8,17 +8,17 @@
 
 1. Clone LLVM repository: 
 
-    `git clone https://github.com/llvm/llvm-project.git llvm`
+    `git clone https://github.com/llvm/llvm-project.git`
 
 
 
 #### Add new pass into LLVM
 
-1. Add file `CHCTransform.h` into `llvm/include/llvm/Transforms/Utils/` repository
-2. Add file `CHCTransform.cpp` into `llvm/lib/Transforms/Utils/` repository
-3. Into file`llvm/lib/Passes/PassBuilder.cpp` add new line `#include "llvm/Transforms/Utils/CHCTransform.h"`
-4. Into file `llvm/lib/Passes/PassRegistry.def` add new line `FUNCTION_PASS("chc-transform", CHCTransformPass())`
-5. Into file `llvm/lib/Transforms/Utils/CMakeLists.txt` add `CHCTransform.cpp`
+1. Add file `CHCTransform.h` into `llvm-project/llvm/include/llvm/Transforms/Utils/` repository
+2. Add file `CHCTransform.cpp` into `llvm-project/llvm/lib/Transforms/Utils/` repository
+3. Into file`llvm-project/llvm/lib/Passes/PassBuilder.cpp` add new line `#include "llvm/Transforms/Utils/CHCTransform.h"`
+4. Into file `llvm-project/llvm/lib/Passes/PassRegistry.def` add new line `FUNCTION_PASS("chc-transform", CHCTransformPass())`
+5. Into file `llvm-project/llvm/lib/Transforms/Utils/CMakeLists.txt` add `CHCTransform.cpp`
 
 
 
@@ -30,6 +30,6 @@
 
 
 
-### Official documentation 
+### Official documentation for LLVM start 
 
 https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm

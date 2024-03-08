@@ -116,8 +116,6 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   
   auto my_blocks = LoadBasicBlockInfo(F);
 
-  //TODO: Create git repo - change name of pass
-
   //Transform 
 
 
