@@ -1,8 +1,6 @@
 llvm-project/
-llvm-project/*
+.*
 
 ! .gitignore
 ! ./README.md
-! llvm-project/llvm/include/Transform/Utils/CHCTransform.h
-! llvm-project/llvm/lib/Transforms/Utils/CHCTransform.cpp
 
