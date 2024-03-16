@@ -5,13 +5,30 @@
 
 namespace llvm {
 
+class Predicate {};
+
+class BB_Predicate : public Predicate {
+public:
+  std::string name;
+  std::vector<std::string> vars;
+};
+class Assign_Predicate : public Predicate {};
+
+struct Implication {
+  std::vector<BB_Predicate> predicates;
+  BB_Predicate head;
+};
+
 struct MyBasicBlock {
   BasicBlock *BB_link;
   std::string name;
+  std::uint8_t id;
   std::vector<llvm::Value *> vars;
-  std::vector<BasicBlock *> preds;
-  std::vector<BasicBlock *> succs;
+  std::vector<std::uint8_t> preds;
+  std::vector<std::uint8_t> succs;
+  BB_Predicate predicate;
 };
+
 
 class CHCTransformPass : public PassInfoMixin<CHCTransformPass> {
 public:
