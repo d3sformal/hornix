@@ -102,6 +102,11 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
     // Find all used variables in instructions
     for (Instruction &I : block_link->instructionsWithoutDebug()) {
 
+      // Remember last br instruction
+      if (I.getOpcode() == Instruction::Br) {
+          BB->last_instruction = &I;
+      }
+
       // Add instructions returning void 
       if (!I.getType()->isVoidTy()) {
         add_variable(&I, BB);
@@ -191,6 +196,7 @@ std::string transform_cmp(Instruction *I) {
     break;
   default:
     sign = " ? ";
+    //throw std::bad_exception("Unknown symbol");
     break;
   }
   return convert_name_to_string(I) + " = " +
@@ -212,6 +218,21 @@ std::string transform_sub(Instruction *I) {
          convert_name_to_string(I->getOperand(1));
 }
 
+// Create predicate for br instruction
+std::string transform_br(Instruction *I, BasicBlock * successor) { 
+  // Instruction must have 3 operands to jump
+  if (I->getNumOperands() != 3) {
+    return "";
+  }
+  
+  std::string res = "false";
+  if (successor == I->getOperand(2)) {
+    res = "true";
+  }
+
+  return convert_name_to_string(I->getOperand(0)) + " = " + res;
+}
+
 // Handle simple instructions with one predicate
 BB_Predicate transform_simple_instructions(Instruction * I) { 
   BB_Predicate predicate;
@@ -226,6 +247,7 @@ BB_Predicate transform_simple_instructions(Instruction * I) {
     predicate.exp = transform_sub(I);
     break;
   default:
+    throw std::bad_exception("Wrong instruction");
     break;
   }
   return predicate;
@@ -240,28 +262,20 @@ std::vector<BB_Predicate> transform_instructions(MyBasicBlock *BB) {
     BB_Predicate predicate;
     
     switch (I.getOpcode()) { 
+    // Instructions with no predicate
+    case Instruction::Br:
+      break; 
+    // Instructions with 1 predicate
     case Instruction::ICmp:
     case Instruction::Add:
     case Instruction::Sub:
       result.push_back(transform_simple_instructions(&I)); 
       break;
-    case Instruction::Br:
-      //Simple Branch instruction -> no predicate
-      break;
-    case Instruction::CallBr:
-      // do nothing
-      predicate.exp = "CallBr";
-      result.push_back(predicate); 
-      break;
-
-    case Instruction::IndirectBr:
-      // do nothing
-      predicate.exp = "IndirectBr";
-      result.push_back(predicate);
-      break;
+    // Instructions with more than 1 predicate
     case Instruction::PHI:
       break;
     default:
+      throw std::bad_exception("Not implemented instruction");
       break;
     }    
   }
@@ -336,7 +350,19 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
       imp.head = get_head_predicate(succcesor);
 
       // Load predicates from instructions
+      // Current BB predicate
       imp.predicates.push_back(current_predicate);
+      
+      // Branch predicate if 2 successors
+      if (BB->last_instruction != nullptr && BB->succs.size() == 2) {
+        BB_Predicate pr;
+        pr.exp = transform_br(BB->last_instruction, succcesor->BB_link);
+        if (pr.exp != "") {
+          imp.predicates.push_back(pr);
+        }
+      }
+
+      //Transform instructions of successor
       auto preds = transform_instructions(succcesor);
       for (auto &p : preds) {
         imp.predicates.push_back(p);
@@ -344,7 +370,6 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
       result.push_back(imp); 
     }
-
   }
   return result;
 }
