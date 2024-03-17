@@ -7,6 +7,7 @@
 using namespace llvm;
 
 int var_index = 0;
+int phi_index = 1;
 
 #pragma region Create my basic blocks
 void returnVar(llvm::Value* I, const char* text) {
@@ -68,12 +69,8 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
     if (!BB.hasName()) {
       auto name = "BB" + std::to_string(bb_index);
       BB.setName(name);
-
-      MyBasicBlock myBB;
-      myBB.BB_link = &BB;
-      myBB.name = name;
-      myBB.id = bb_index;
-
+      
+      MyBasicBlock myBB(&BB, name, bb_index);
       mymap.insert(std::pair<std::uint8_t, MyBasicBlock>(bb_index, myBB));
 
       ++bb_index;
@@ -168,7 +165,7 @@ std::string convert_name_to_string(Value *BB) {
 }
 
 // Transform Cmp instruction
-std::string transform_cmp(Instruction *I) { 
+Predicate transform_cmp(Instruction *I) { 
   std::string sign;
   CmpInst *CmpI = (CmpInst *)I;
   switch (CmpI->getPredicate()) {
@@ -199,30 +196,35 @@ std::string transform_cmp(Instruction *I) {
     //throw std::bad_exception("Unknown symbol");
     break;
   }
-  return convert_name_to_string(I) + " = " +
+  auto exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + sign +
          convert_name_to_string(I->getOperand(1));
+  return Predicate(exp);
 }
 
 // Transform Add instruction
-std::string transform_add(Instruction *I) {
-  return convert_name_to_string(I) + " = " +
+Predicate transform_add(Instruction *I) {
+  auto exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + " + " +
          convert_name_to_string(I->getOperand(1));
+  return Predicate(exp);
 }
 
 // Transform Sub instruction 
-std::string transform_sub(Instruction *I) {
-  return convert_name_to_string(I) + " = " +
+Predicate transform_sub(Instruction *I) {
+  auto exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + " - " +
          convert_name_to_string(I->getOperand(1));
+
+  return Predicate(exp);
 }
 
 // Create predicate for br instruction
-std::string transform_br(Instruction *I, BasicBlock * successor) { 
+Predicate transform_br(Instruction *I, BasicBlock * successor) { 
   // Instruction must have 3 operands to jump
   if (I->getNumOperands() != 3) {
-    return "";
+    throw new std::bad_exception(
+        "Wrong instruction. Too few function operands");
   }
   
   std::string res = "false";
@@ -230,36 +232,32 @@ std::string transform_br(Instruction *I, BasicBlock * successor) {
     res = "true";
   }
 
-  return convert_name_to_string(I->getOperand(0)) + " = " + res;
+  auto exp = convert_name_to_string(I->getOperand(0)) + " = " + res;
+
+  return Predicate(exp);
 }
 
-// Handle simple instructions with one predicate
-BB_Predicate transform_simple_instructions(Instruction * I) { 
-  BB_Predicate predicate;
-  switch (I->getOpcode()) {
-  case Instruction::ICmp:
-    predicate.exp = transform_cmp(I);
-    break;
-  case Instruction::Add:
-    predicate.exp = transform_add(I);
-    break;
-  case Instruction::Sub:
-    predicate.exp = transform_sub(I);
-    break;
-  default:
-    throw std::bad_exception("Wrong instruction");
-    break;
-  }
-  return predicate;
+// Transform Phi instruction and create new variables
+Predicate transform_phi(Instruction * I, MyBasicBlock * BB) {
+
+  auto var = "p" + std::to_string(phi_index);
+  BB->phi_vars.push_back(PhiVariable(var, I));
+  ++phi_index;
+  
+  auto exp = convert_name_to_string(I) + " = ite(" + var + ", " + 
+    convert_name_to_string(I->getOperand(0)) + ", " +
+    convert_name_to_string(I->getOperand(1)) + ")";    
+
+  return Predicate(exp);
 }
 
 // Transform instructions to predicates from instructions in basic block
-std::vector<BB_Predicate> transform_instructions(MyBasicBlock *BB) {
-  std::vector<BB_Predicate> result;
+std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
+  std::vector<Predicate> result;
   
   for (Instruction &I: BB->BB_link->instructionsWithoutDebug()) {
 
-    BB_Predicate predicate;
+    Predicate predicate;
     
     switch (I.getOpcode()) { 
     // Instructions with no predicate
@@ -267,15 +265,19 @@ std::vector<BB_Predicate> transform_instructions(MyBasicBlock *BB) {
       break; 
     // Instructions with 1 predicate
     case Instruction::ICmp:
-    case Instruction::Add:
-    case Instruction::Sub:
-      result.push_back(transform_simple_instructions(&I)); 
+      result.push_back(transform_cmp(&I));
       break;
-    // Instructions with more than 1 predicate
+    case Instruction::Add:
+      result.push_back(transform_add(&I));
+      break;
+    case Instruction::Sub:
+      result.push_back(transform_sub(&I));
+      break;
     case Instruction::PHI:
+      result.push_back(transform_phi(&I, BB));
       break;
     default:
-      throw std::bad_exception("Not implemented instruction");
+      //throw std::bad_exception("Not implemented instruction");
       break;
     }    
   }
@@ -283,48 +285,73 @@ std::vector<BB_Predicate> transform_instructions(MyBasicBlock *BB) {
 }
 
 // Create Predicate for basic : Format {name}({variables}), ex. BB1(%x1,%x2)
-BB_Predicate get_head_predicate(MyBasicBlock * BB) {
+Predicate get_head_predicate(MyBasicBlock * BB) {
 
-  BB_Predicate predicate;
-  predicate.name = BB->name;
+  std::vector<std::string> vars;
   for (auto &v : BB->vars) {
     if (v->getValueID() != llvm::Value::ConstantIntVal) {
       std::string a = convert_name_to_string(v);
-      predicate.vars.push_back(a);
+      vars.push_back(a);
     }
   }
 
-  return predicate;
+  for (auto &v : BB->phi_vars) {
+    vars.push_back(v.name);
+  }
+
+  return Predicate(BB->name, vars); 
 }
 
 // Create first implication for function input and transfer to BB1 
 std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock * BB1) {
+  
+  std::vector<Implication> result;
 
-  MyBasicBlock BB_entry;
-  BB_entry.name = "BBentry";
+  // Create basic block for entry
+  MyBasicBlock BB_entry(nullptr, "BBentry", 0);
+  // Load arguments as variables
   for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
     add_variable(arg, &BB_entry);
   }
 
-  BB_Predicate predicate = get_head_predicate(&BB_entry);
+  Predicate predicate = get_head_predicate(&BB_entry);
 
-  Implication imp;
-  imp.head = predicate;
-  BB_Predicate pred;
-  pred.exp = "true";
-  imp.predicates.push_back(pred);
-  std::vector<Implication> result;
+  // Create first implication (true -> BBentry(x1,..))
+  Implication imp(predicate);
+  imp.predicates.push_back(Predicate("true"));
   result.push_back(imp);
   
-  Implication imp1;
+  // Create transfer to BB1 
+  Implication imp1(get_head_predicate(BB1));
   imp1.predicates.push_back(predicate);
-  auto preds = transform_instructions(BB1);
-  for (auto &p: preds) {
+  if (!BB1->transformed) {
+    BB1->predicates = transform_instructions(BB1);
+    BB1->transformed = true;
+  }
+  for (auto &p: BB1->predicates) {
     imp1.predicates.push_back(p);
   }  
-  imp1.head = get_head_predicate(BB1);
   result.push_back(imp1);
 
+  return result;
+}
+
+// Set variables for phi instruction, depending on label before
+std::vector<Predicate> set_phi_variables(MyBasicBlock *predecessor,
+                                     MyBasicBlock *successor) {
+
+  std::vector<Predicate> result;
+  for (auto &v : successor->phi_vars) {
+    auto o = v.instruction->DoPHITranslation(successor->BB_link, predecessor->BB_link);
+    
+    if (o == v.instruction->getOperand(0)) {
+      result.push_back(Predicate(v.name + " = false"));  
+    } else if (o == v.instruction->getOperand(1)) {
+      result.push_back(Predicate(v.name + " = true"));
+    } else {
+      //throw new std::bad_exception("Wrong label.");
+    }
+  }
   return result;
 }
 
@@ -340,32 +367,39 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
     MyBasicBlock * BB = &it.second;
     
     // Load head predicate for current block
-    BB_Predicate current_predicate = get_head_predicate(BB);
+    Predicate current_predicate = get_head_predicate(BB);
 
     for (auto &succ : BB->succs) {
       auto succcesor = &my_blocks[succ];
 
       // Create implication
-      Implication imp;
-      imp.head = get_head_predicate(succcesor);
+      Implication imp(get_head_predicate(succcesor));
 
       // Load predicates from instructions
       // Current BB predicate
       imp.predicates.push_back(current_predicate);
-      
+
       // Branch predicate if 2 successors
       if (BB->last_instruction != nullptr && BB->succs.size() == 2) {
-        BB_Predicate pr;
-        pr.exp = transform_br(BB->last_instruction, succcesor->BB_link);
-        if (pr.exp != "") {
-          imp.predicates.push_back(pr);
-        }
+        imp.predicates.push_back(
+            Predicate(transform_br(BB->last_instruction, succcesor->BB_link)));
       }
 
-      //Transform instructions of successor
-      auto preds = transform_instructions(succcesor);
-      for (auto &p : preds) {
+      // Transform instructions of successor
+      if (!succcesor->transformed) {
+        succcesor->predicates = transform_instructions(succcesor);
+        succcesor->transformed = true;
+      }
+      for (auto &p : succcesor->predicates) {
         imp.predicates.push_back(p);
+      }
+
+      // Set new boolean variables for phi instructions
+      if (succcesor->phi_vars.size() > 0) {
+        auto preds = set_phi_variables(BB, succcesor);
+        for (auto &p : preds) {
+          imp.predicates.push_back(p);
+        }
       }
 
       result.push_back(imp); 
@@ -376,21 +410,31 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 #pragma endregion
 
 #pragma region Print basic block
-void print_BBPredicate(BB_Predicate *p) {
-  if (p->name.empty()) {
-    errs() << p->exp;
-  } else {
-    errs() << p->name << "(";
-    auto first = 1;
-    for (auto &v : p->vars) {
-      if (!first) {
-        errs() << ", ";
-      } else {
-        first = 0;
-      }
-      errs() << v;
+void print_BasicBlockHead(Predicate * p) {
+  errs() << p->name << "(";
+  auto first = 1;
+  for (auto &v : p->vars) {
+    if (!first) {
+      llvm::errs() << ", ";
+    } else {
+      first = 0;
     }
-    errs() << ")";
+    errs() << v;
+  }
+  errs() << ")";
+}
+
+void print_BBPredicate(Predicate *p) {
+  
+  switch (p->type) {
+  case MyPredicateType::Expression:
+    errs() << p->exp;
+    break;
+  case MyPredicateType::BasicBlockHead:
+    print_BasicBlockHead(p);
+    break;
+  default:
+    throw new std::bad_exception("Not implemented PredicateType");
   }
 }
 
@@ -408,7 +452,7 @@ void print_implications(std::vector<Implication> implications)
         first = 0;
       }
       
-      BB_Predicate * pred = (BB_Predicate *) &p;
+      Predicate * pred = (Predicate *) &p;
       print_BBPredicate(pred);
     }
 

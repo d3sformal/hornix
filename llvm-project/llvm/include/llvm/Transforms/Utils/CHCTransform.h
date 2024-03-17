@@ -5,19 +5,52 @@
 
 namespace llvm {
 
-class Predicate {};
+enum MyPredicateType {
+  BasicBlockHead,
+  Expression,
+  Unknown
+};
 
-class BB_Predicate : public Predicate {
-public:
+struct Predicate {
   std::string name;
   std::vector<std::string> vars;
   std::string exp;
+  MyPredicateType type;
+
+  Predicate(std::string expression) { 
+    exp = expression;
+    type = MyPredicateType::Expression;
+  }
+
+  Predicate(std::string name_, std::vector<std::string> vars_) {
+    name = name_;
+    vars = vars_;
+    type = MyPredicateType::BasicBlockHead;
+  }
+
+  Predicate() { type = MyPredicateType::Unknown;
+  }
 };
-class Assign_Predicate : public Predicate {};
 
 struct Implication {
-  std::vector<BB_Predicate> predicates;
-  BB_Predicate head;
+  std::vector<Predicate> predicates;
+  Predicate head;
+
+  Implication(Predicate head_) {
+    head = head_;
+  }
+};
+
+struct PhiVariable {
+  std::string name;
+  Instruction *instruction;
+
+  PhiVariable(std::string name_, Instruction *I) { 
+    name = name_;
+    instruction = I;
+  }
+
+  PhiVariable() {}
 };
 
 struct MyBasicBlock {
@@ -35,6 +68,22 @@ struct MyBasicBlock {
   std::vector<std::uint8_t> succs;
   // Reference to last br instruction of basic block 
   llvm::Instruction * last_instruction;
+  // Coded instruction for basic block except phi
+  std::vector<Predicate> predicates;
+  // Boolean to see if instructions where transformed
+  bool transformed;
+  // List of phi variables
+  std::vector<PhiVariable> phi_vars;
+
+  MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
+    BB_link = BB_link_;
+    name = name_;
+    id = id_;
+    transformed = false;
+    last_instruction = nullptr;
+  }
+
+  MyBasicBlock() {}
 };
 
 
