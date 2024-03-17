@@ -11,6 +11,7 @@ class BB_Predicate : public Predicate {
 public:
   std::string name;
   std::vector<std::string> vars;
+  std::string exp;
 };
 class Assign_Predicate : public Predicate {};
 
@@ -26,7 +27,6 @@ struct MyBasicBlock {
   std::vector<llvm::Value *> vars;
   std::vector<std::uint8_t> preds;
   std::vector<std::uint8_t> succs;
-  BB_Predicate predicate;
 };
 
 
