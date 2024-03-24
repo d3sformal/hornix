@@ -41,18 +41,6 @@ struct Implication {
   }
 };
 
-struct PhiVariable {
-  std::string name;
-  Instruction *instruction;
-
-  PhiVariable(std::string name_, Instruction *I) { 
-    name = name_;
-    instruction = I;
-  }
-
-  PhiVariable() {}
-};
-
 struct MyBasicBlock {
   // Reference to basic block 
   BasicBlock *BB_link;
@@ -72,8 +60,6 @@ struct MyBasicBlock {
   std::vector<Predicate> predicates;
   // Boolean to see if instructions where transformed
   bool transformed;
-  // List of phi variables
-  std::vector<PhiVariable> phi_vars;
 
   MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
     BB_link = BB_link_;

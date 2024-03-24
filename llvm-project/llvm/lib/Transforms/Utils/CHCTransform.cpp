@@ -237,20 +237,6 @@ Predicate transform_br(Instruction *I, BasicBlock * successor) {
   return Predicate(exp);
 }
 
-// Transform Phi instruction and create new variables
-Predicate transform_phi(Instruction * I, MyBasicBlock * BB) {
-
-  auto var = "p" + std::to_string(phi_index);
-  BB->phi_vars.push_back(PhiVariable(var, I));
-  ++phi_index;
-  
-  auto exp = convert_name_to_string(I) + " = ite(" + var + ", " + 
-    convert_name_to_string(I->getOperand(0)) + ", " +
-    convert_name_to_string(I->getOperand(1)) + ")";    
-
-  return Predicate(exp);
-}
-
 // Transform instructions to predicates from instructions in basic block
 std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
   std::vector<Predicate> result;
@@ -262,6 +248,7 @@ std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
     switch (I.getOpcode()) { 
     // Instructions with no predicate
     case Instruction::Br:
+    case Instruction::PHI:
       break; 
     // Instructions with 1 predicate
     case Instruction::ICmp:
@@ -272,9 +259,6 @@ std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
       break;
     case Instruction::Sub:
       result.push_back(transform_sub(&I));
-      break;
-    case Instruction::PHI:
-      result.push_back(transform_phi(&I, BB));
       break;
     default:
       //throw std::bad_exception("Not implemented instruction");
@@ -293,10 +277,6 @@ Predicate get_head_predicate(MyBasicBlock * BB) {
       std::string a = convert_name_to_string(v);
       vars.push_back(a);
     }
-  }
-
-  for (auto &v : BB->phi_vars) {
-    vars.push_back(v.name);
   }
 
   return Predicate(BB->name, vars); 
@@ -341,16 +321,15 @@ std::vector<Predicate> set_phi_variables(MyBasicBlock *predecessor,
                                      MyBasicBlock *successor) {
 
   std::vector<Predicate> result;
-  for (auto &v : successor->phi_vars) {
-    auto o = v.instruction->DoPHITranslation(successor->BB_link, predecessor->BB_link);
-    
-    if (o == v.instruction->getOperand(0)) {
-      result.push_back(Predicate(v.name + " = false"));  
-    } else if (o == v.instruction->getOperand(1)) {
-      result.push_back(Predicate(v.name + " = true"));
-    } else {
-      //throw new std::bad_exception("Wrong label.");
+  for (Instruction &I : successor->BB_link->instructionsWithoutDebug()) {
+    if (I.getOpcode() == Instruction::PHI) {
+      auto o = I.DoPHITranslation(successor->BB_link, predecessor->BB_link);
+
+      auto exp = convert_name_to_string(&I) + " = " + convert_name_to_string(o);
+
+      result.push_back(Predicate(exp));
     }
+    
   }
   return result;
 }
@@ -394,14 +373,12 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
         imp.predicates.push_back(p);
       }
 
-      // Set new boolean variables for phi instructions
-      if (succcesor->phi_vars.size() > 0) {
-        auto preds = set_phi_variables(BB, succcesor);
-        for (auto &p : preds) {
-          imp.predicates.push_back(p);
-        }
+      // Translate phi instructions
+      auto preds = set_phi_variables(BB, succcesor);
+      for (auto &p : preds) {
+        imp.predicates.push_back(p);
       }
-
+      
       result.push_back(imp); 
     }
   }
