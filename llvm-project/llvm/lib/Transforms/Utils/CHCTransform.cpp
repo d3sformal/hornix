@@ -8,21 +8,10 @@
 using namespace llvm;
 
 int var_index = 0;
-int phi_index = 1;
 
 #pragma region Create my basic blocks
-void returnVar(llvm::Value* I, const char* text) {
-  if (!I->hasName()) {
-    I->setName("x" + std::to_string(var_index));
-    ++var_index;
-  }
-  errs() << text << I->getName() << ": ";
-  I->printAsOperand(errs(), true);
-  errs() << ", ";
-}
-
 // Set name for variable and add to basic block info if not presented 
-void add_variable(llvm::Value *var, MyBasicBlock* my_block) {
+void add_variable(Value *var, MyBasicBlock* my_block) {
   
   // Skip labels and pointers
   if (var->getType()->isLabelTy() || var->getType()->isPointerTy()) {
@@ -60,7 +49,7 @@ std::uint8_t get_block_id_by_link(
 }
 
 // See if call instruction calls _wassert function
-bool isFailedAssertCall(Instruction* I) {
+bool isFailedAssertCall(Instruction *I) {
 
   if (I->getOpcode() == Instruction::Call) {
     if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
@@ -73,7 +62,8 @@ bool isFailedAssertCall(Instruction* I) {
 }
 
 // Name basic blocks and create own structs for basic blocks
-std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F) {
+std::unordered_map<std::uint8_t, MyBasicBlock>
+load_basic_block_info(Function &F) {
   std::unordered_map<std::uint8_t, MyBasicBlock> myBasicBlocks;
 
   int bb_index = 1;
@@ -181,13 +171,14 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 
 #pragma region Transform basic blocks
 // Add predicates from vector to MyBasicBlock struct
-void add_predicates_to_implication(std::vector<Predicate> * predicates, Implication * implication) {
+void add_predicates_to_implication(std::vector<Predicate> *predicates,
+                                   Implication *implication) {
   for (auto &p : *predicates) {
     implication->predicates.push_back(p);
   }
 }
 
-// Convert llvm::Value name to std::string
+// Convert Value name to std::string
 std::string convert_name_to_string(Value *BB) {
   std::string block_address;
   raw_string_ostream string_stream(block_address);
@@ -269,26 +260,6 @@ Predicate transform_br(Instruction *I, BasicBlock * successor) {
   return Predicate(exp);
 }
 
-
-void transform_call(Instruction *I) {
-
-  if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
-    auto *fn = call_inst->getCalledFunction();
-    StringRef fn_name = fn->getName();
-    //fn->getParent();
-    errs() << "\n\nFunction: " << fn_name << " : " << call_inst->getArgOperand(0) << "\n";
-    /*for (auto arg = fn->arg_begin(); arg != fn->arg_end(); ++arg) {
-      errs() << *arg << "\n";
-    }*/
-
-    errs() << "\n\n";
-  }
-
-  /*CallInst* inst = dyn_cast<CallInst>(I);
-
-  Function *f = inst->getCalledFunction();*/
-}
-
 // Transform instructions to predicates from instructions in basic block
 std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
   
@@ -333,7 +304,7 @@ Predicate get_head_predicate(MyBasicBlock * BB) {
   std::vector<std::string> vars;
   std::string var_name;
   for (auto &v : BB->vars) {
-    if (v->getValueID() != llvm::Value::ConstantIntVal) {
+    if (v->getValueID() != Value::ConstantIntVal) {
       var_name = convert_name_to_string(v);
       vars.push_back(var_name);
     }
@@ -379,7 +350,7 @@ std::vector<Predicate> transform_phi_instructions(MyBasicBlock *predecessor,
                                      MyBasicBlock *successor) {
 
   std::vector<Predicate> result;
-  llvm::Value *translation;
+  Value *translation;
 
   for (Instruction &I : successor->BB_link->instructionsWithoutDebug()) {
     if (I.getOpcode() == Instruction::PHI) {
@@ -452,7 +423,7 @@ void print_BasicBlockHead(Predicate * p) {
   auto first = 1;
   for (auto &v : p->vars) {
     if (!first) {
-      llvm::errs() << ", ";
+      errs() << ", ";
     } else {
       first = 0;
     }
@@ -507,118 +478,10 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   
   auto my_blocks = load_basic_block_info(F);
 
-  //Transform 
   auto implications = transform_basic_blocks(my_blocks, F);
 
-
-
-  //Print Result
-
-
-  // Print info
   //PrintInfo(my_blocks);
-
   print_implications(implications);
  
-
-  /*
-   errs() << "------------------------\n\n";     
-
-
-    for (BasicBlock &BB : F) {
-
-    errs() << "Basic block (name=" << BB.getName() << ")\n";
-
-    errs() << "Prec= ";
-    for (auto pred : predecessors(&BB)) {
-      pred->printAsOperand(errs(), true);
-      errs() << ", ";
-    }
-    errs() << "\n";
-
-    errs() << "Succ= ";
-    for (auto succ : successors(&BB)) {
-      succ->printAsOperand(errs(), true);
-      errs() << ", ";
-    }
-    errs() << "\n";
-
-    errs() << "Vars= \n";
-    for (Instruction &I : BB.instructionsWithoutDebug()) {
-      errs() << "Instruction: " << I.getOpcode() << " : " << I.getOpcodeName()
-             << "\n";
-
-      if (!I.getType()->isVoidTy()) {
-        returnVar(&I, "Ret: ");
-        errs() << "\n";
-      }
-
-      for (auto &o : I.operands()) {
-          returnVar(o, "");
-      }
-      errs() << "\n";
-    }
-    errs() << "\n\n";
-  }
-
-  
-    errs() << "Function : " << F.getName() << "\nArgs: ";
-   for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
-       returnVar(arg, "");
-   }
-   errs() << "\n\n";
-
-
-  
-  for (BasicBlock &BB : F) {
-
-    errs() << "Basic block (name=" << BB.getName() << ")\n";
-
-    errs() << "Prec= ";
-    std::vector<BasicBlock *> preds;
-    for (auto pred : predecessors(&BB)) 
-    {
-      preds.push_back(pred);
-      pred->printAsOperand(errs(), true);
-      errs() << ", ";
-    }
-    errs() << "\n";
-
-    errs() << "Succ= ";
-    for (auto succ : successors(&BB))
-    {
-      succ->printAsOperand(errs(), true);
-      errs() << ", ";
-    }
-    errs() << "\n";
-
-    errs() << "Vars= \n";    
-    for (Instruction &I : BB.instructionsWithoutDebug()) {
-      errs() << "Instruction: " << I.getOpcode() << " : " << I.getOpcodeName()
-               << "\n";
-
-      if (!I.getType()->isVoidTy()) {
-        returnVar(&I, "Ret: ");
-        errs() << "\n";
-      }
-
-      if (I.getOpcode() == Instruction::PHI) {
-        for (auto p : preds) {
-          auto o = I.DoPHITranslation(&BB, p);
-          p->printAsOperand(errs(), true);
-          errs() << " -> ";
-          returnVar(o, "");
-        }
-      } else {          
-          for (auto &o : I.operands()) {
-            returnVar(o, "");
-          }
-        }
-      errs() << "\n";
-    }    
-    errs() << "\n\n";
-  }
-
-  */
   return PreservedAnalyses::all();
 }
