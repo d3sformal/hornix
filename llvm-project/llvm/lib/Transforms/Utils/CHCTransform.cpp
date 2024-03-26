@@ -22,27 +22,27 @@ void returnVar(llvm::Value* I, const char* text) {
 }
 
 // Set name for variable and add to basic block info if not presented 
-void add_variable(llvm::Value *I, MyBasicBlock* my_block) {
+void add_variable(llvm::Value *var, MyBasicBlock* my_block) {
   
   // Skip labels and pointers
-  if (I->getType()->isLabelTy() || I->getType()->isPointerTy()) {
+  if (var->getType()->isLabelTy() || var->getType()->isPointerTy()) {
     return;
   }
 
   // Set name
-  if (!I->hasName()) {
-    I->setName("x" + std::to_string(var_index));
+  if (!var->hasName()) {
+    var->setName("x" + std::to_string(var_index));
     ++var_index;
   }
 
   // Find in basic block info
-  if (std::find(my_block->vars.begin(), my_block->vars.end(), I) !=
+  if (std::find(my_block->vars.begin(), my_block->vars.end(), var) !=
       my_block->vars.end()) {
     return;
   }
 
   // Add to basic block info
-  my_block->vars.push_back(I);
+  my_block->vars.push_back(var);
 }
 
 // Find id of basic block by reference to llvm class
@@ -50,28 +50,31 @@ std::uint8_t get_block_id_by_link(
     BasicBlock *block,
     std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 
-  for (auto &it : my_blocks) {
-    if (it.second.BB_link == block) {
-      return it.first;
+  for (auto &bb : my_blocks) {
+    if (bb.second.BB_link == block) {
+      return bb.first;
     }
   }
 
-  return 0;
+  throw std::exception("Unkown basic block.");
 }
 
 // See if call instruction calls _wassert function
 bool isFailedAssertCall(Instruction* I) {
-  if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
-    auto *fn = call_inst->getCalledFunction();
-    StringRef fn_name = fn->getName();
-    return fn_name == StringRef("_wassert");
+
+  if (I->getOpcode() == Instruction::Call) {
+    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+      Function *fn = call_inst->getCalledFunction();
+      return fn->getName() == StringRef("_wassert");
+    }
   }
+
   return false;
 }
 
 // Name basic blocks and create own structs for basic blocks
 std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F) {
-  std::unordered_map<std::uint8_t, MyBasicBlock> mymap;
+  std::unordered_map<std::uint8_t, MyBasicBlock> myBasicBlocks;
 
   int bb_index = 1;
 
@@ -82,29 +85,34 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
       BB.setName(name);
       
       MyBasicBlock myBB(&BB, name, bb_index);
-      mymap.insert(std::pair<std::uint8_t, MyBasicBlock>(bb_index, myBB));
+      myBasicBlocks.insert(std::pair<std::uint8_t, MyBasicBlock>(bb_index, myBB));
 
       ++bb_index;
     }
   }
 
   // Set MyBasicBlock info
-  for (auto &it : mymap) {
+  for (auto &it : myBasicBlocks) {
     MyBasicBlock *BB = &it.second;
     BasicBlock *block_link = BB->BB_link;
 
     // Set Predecessors of blocks and variables from them
     for (auto pred : predecessors(block_link)) {
-      auto predId = get_block_id_by_link(pred, mymap);
-        BB->preds.push_back(predId);
-      for (auto v : mymap[predId].vars) {
+      // Find predecessor id
+      auto pred_id = get_block_id_by_link(pred, myBasicBlocks);
+      
+      // Add predecessor
+      BB->predecessors.push_back(pred_id);
+      
+      // Add new variables from predecessor
+      for (auto v : myBasicBlocks[pred_id].vars) {
           add_variable(v, BB);
       }
     }
 
     // Set successors of block
     for (auto succ : successors(block_link)) {
-      BB->succs.push_back(get_block_id_by_link(succ, mymap));
+      BB->successors.push_back(get_block_id_by_link(succ, myBasicBlocks));
     }
 
     // Find all used variables in instructions
@@ -116,7 +124,7 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
           break;
       }
 
-      // Remember last br instruction
+      // Remember last br instruction (should be only one)
       if (I.getOpcode() == Instruction::Br) {
           BB->last_instruction = &I;
       }
@@ -133,7 +141,7 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
     }
   }
 
-  return mymap;
+  return myBasicBlocks;
 }
 #pragma endregion
 
@@ -146,7 +154,7 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 
     errs() << "Preds: "
            << "\n";
-    for (auto pred : BB.preds) {
+    for (auto pred : BB.predecessors) {
       my_blocks[pred].BB_link->printAsOperand(errs(), true);
       errs() << " -> " << std::to_string(pred) << "\n";
     }
@@ -154,7 +162,7 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 
     errs() << "Succs: "
            << "\n";
-    for (auto succ : BB.succs) {
+    for (auto succ : BB.successors) {
       my_blocks[succ].BB_link->printAsOperand(errs(), true);
       errs() << " -> " << std::to_string(succ) << "\n";
     }
@@ -172,6 +180,13 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 #pragma endregion
 
 #pragma region Transform basic blocks
+// Add predicates from vector to MyBasicBlock struct
+void add_predicates_to_implication(std::vector<Predicate> * predicates, Implication * implication) {
+  for (auto &p : *predicates) {
+    implication->predicates.push_back(p);
+  }
+}
+
 // Convert llvm::Value name to std::string
 std::string convert_name_to_string(Value *BB) {
   std::string block_address;
@@ -213,7 +228,7 @@ Predicate transform_cmp(Instruction *I) {
     //throw std::bad_exception("Unknown symbol");
     break;
   }
-  auto exp = convert_name_to_string(I) + " = " +
+  std::string exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + sign +
          convert_name_to_string(I->getOperand(1));
   return Predicate(exp);
@@ -221,7 +236,7 @@ Predicate transform_cmp(Instruction *I) {
 
 // Transform Add instruction
 Predicate transform_add(Instruction *I) {
-  auto exp = convert_name_to_string(I) + " = " +
+  std::string exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + " + " +
          convert_name_to_string(I->getOperand(1));
   return Predicate(exp);
@@ -229,7 +244,7 @@ Predicate transform_add(Instruction *I) {
 
 // Transform Sub instruction 
 Predicate transform_sub(Instruction *I) {
-  auto exp = convert_name_to_string(I) + " = " +
+  std::string exp = convert_name_to_string(I) + " = " +
          convert_name_to_string(I->getOperand(0)) + " - " +
          convert_name_to_string(I->getOperand(1));
 
@@ -249,7 +264,7 @@ Predicate transform_br(Instruction *I, BasicBlock * successor) {
     res = "true";
   }
 
-  auto exp = convert_name_to_string(I->getOperand(0)) + " = " + res;
+  std::string exp = convert_name_to_string(I->getOperand(0)) + " = " + res;
 
   return Predicate(exp);
 }
@@ -276,6 +291,7 @@ void transform_call(Instruction *I) {
 
 // Transform instructions to predicates from instructions in basic block
 std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
+  
   std::vector<Predicate> result;
   
   for (Instruction &I: BB->BB_link->instructionsWithoutDebug()) {
@@ -315,10 +331,11 @@ Predicate get_head_predicate(MyBasicBlock * BB) {
 
   // Normal basic block header
   std::vector<std::string> vars;
+  std::string var_name;
   for (auto &v : BB->vars) {
     if (v->getValueID() != llvm::Value::ConstantIntVal) {
-      std::string a = convert_name_to_string(v);
-      vars.push_back(a);
+      var_name = convert_name_to_string(v);
+      vars.push_back(var_name);
     }
   }
 
@@ -351,28 +368,27 @@ std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock 
     BB1->predicates = transform_instructions(BB1);
     BB1->transformed = true;
   }
-  for (auto &p: BB1->predicates) {
-    imp1.predicates.push_back(p);
-  }  
+  add_predicates_to_implication(&BB1->predicates, &imp1);
   result.push_back(imp1);
 
   return result;
 }
 
 // Set variables for phi instruction, depending on label before
-std::vector<Predicate> set_phi_variables(MyBasicBlock *predecessor,
+std::vector<Predicate> transform_phi_instructions(MyBasicBlock *predecessor,
                                      MyBasicBlock *successor) {
 
   std::vector<Predicate> result;
+  llvm::Value *translation;
+
   for (Instruction &I : successor->BB_link->instructionsWithoutDebug()) {
     if (I.getOpcode() == Instruction::PHI) {
-      auto o = I.DoPHITranslation(successor->BB_link, predecessor->BB_link);
+      translation = I.DoPHITranslation(successor->BB_link, predecessor->BB_link);
 
-      auto exp = convert_name_to_string(&I) + " = " + convert_name_to_string(o);
+      std::string exp = convert_name_to_string(&I) + " = " + convert_name_to_string(translation);
 
       result.push_back(Predicate(exp));
-    }
-    
+    }    
   }
   return result;
 }
@@ -396,36 +412,32 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
     // Load head predicate for current block
     Predicate current_predicate = get_head_predicate(BB);
 
-    for (auto &succ : BB->succs) {
-      auto succcesor = &my_blocks[succ];
+    for (auto &succ : BB->successors) {
+      auto successor = &my_blocks[succ];
 
       // Create implication
-      Implication imp(get_head_predicate(succcesor));
+      Implication imp(get_head_predicate(successor));
 
       // Load predicates from instructions
       // Current BB predicate
       imp.predicates.push_back(current_predicate);
 
       // Branch predicate if 2 successors
-      if (BB->last_instruction != nullptr && BB->succs.size() == 2) {
+      if (BB->last_instruction != nullptr && BB->successors.size() == 2) {
         imp.predicates.push_back(
-            Predicate(transform_br(BB->last_instruction, succcesor->BB_link)));
+            Predicate(transform_br(BB->last_instruction, successor->BB_link)));
       }
 
       // Transform instructions of successor
-      if (!succcesor->transformed) {
-        succcesor->predicates = transform_instructions(succcesor);
-        succcesor->transformed = true;
+      if (!successor->transformed) {
+        successor->predicates = transform_instructions(successor);
+        successor->transformed = true;
       }
-      for (auto &p : succcesor->predicates) {
-        imp.predicates.push_back(p);
-      }
+      add_predicates_to_implication(&successor->predicates, &imp);
 
       // Translate phi instructions
-      auto preds = set_phi_variables(BB, succcesor);
-      for (auto &p : preds) {
-        imp.predicates.push_back(p);
-      }
+      auto predicates = transform_phi_instructions(BB, successor);
+      add_predicates_to_implication(&predicates, &imp);
       
       result.push_back(imp); 
     }

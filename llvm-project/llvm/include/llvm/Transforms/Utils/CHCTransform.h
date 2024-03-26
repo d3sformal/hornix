@@ -51,9 +51,9 @@ struct MyBasicBlock {
   // List of references to variables used in instructions of basic block and its predecessors
   std::vector<llvm::Value *> vars;
   // List of ids of predecessors of basic block
-  std::vector<std::uint8_t> preds;
+  std::vector<std::uint8_t> predecessors;
   // List of ids of successors of basic block
-  std::vector<std::uint8_t> succs;
+  std::vector<std::uint8_t> successors;
   // Reference to last br instruction of basic block 
   llvm::Instruction * last_instruction;
   // Coded instruction for basic block except phi
