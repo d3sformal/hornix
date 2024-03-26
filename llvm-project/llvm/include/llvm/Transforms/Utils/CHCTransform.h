@@ -60,6 +60,8 @@ struct MyBasicBlock {
   std::vector<Predicate> predicates;
   // Boolean to see if instructions where transformed
   bool transformed;
+  // True if block calls wassert function and fails
+  bool isFalseBlock;
 
   MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
     BB_link = BB_link_;
@@ -67,6 +69,7 @@ struct MyBasicBlock {
     id = id_;
     transformed = false;
     last_instruction = nullptr;
+    isFalseBlock = false;
   }
 
   MyBasicBlock() {}

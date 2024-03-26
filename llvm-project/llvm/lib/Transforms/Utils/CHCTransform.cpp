@@ -1,6 +1,7 @@
 #include "llvm/Transforms/Utils/CHCTransform.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
 #include "iostream"
 #include <map>
 
@@ -58,6 +59,16 @@ std::uint8_t get_block_id_by_link(
   return 0;
 }
 
+// See if call instruction calls _wassert function
+bool isFailedAssertCall(Instruction* I) {
+  if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+    auto *fn = call_inst->getCalledFunction();
+    StringRef fn_name = fn->getName();
+    return fn_name == StringRef("_wassert");
+  }
+  return false;
+}
+
 // Name basic blocks and create own structs for basic blocks
 std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F) {
   std::unordered_map<std::uint8_t, MyBasicBlock> mymap;
@@ -98,6 +109,12 @@ std::unordered_map<std::uint8_t, MyBasicBlock> load_basic_block_info(Function &F
 
     // Find all used variables in instructions
     for (Instruction &I : block_link->instructionsWithoutDebug()) {
+      
+      // See if basic block handles failed assertion
+      if (isFailedAssertCall(&I)) {
+          BB->isFalseBlock = true;
+          break;
+      }
 
       // Remember last br instruction
       if (I.getOpcode() == Instruction::Br) {
@@ -237,6 +254,26 @@ Predicate transform_br(Instruction *I, BasicBlock * successor) {
   return Predicate(exp);
 }
 
+
+void transform_call(Instruction *I) {
+
+  if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+    auto *fn = call_inst->getCalledFunction();
+    StringRef fn_name = fn->getName();
+    //fn->getParent();
+    errs() << "\n\nFunction: " << fn_name << " : " << call_inst->getArgOperand(0) << "\n";
+    /*for (auto arg = fn->arg_begin(); arg != fn->arg_end(); ++arg) {
+      errs() << *arg << "\n";
+    }*/
+
+    errs() << "\n\n";
+  }
+
+  /*CallInst* inst = dyn_cast<CallInst>(I);
+
+  Function *f = inst->getCalledFunction();*/
+}
+
 // Transform instructions to predicates from instructions in basic block
 std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
   std::vector<Predicate> result;
@@ -270,7 +307,13 @@ std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
 
 // Create Predicate for basic : Format {name}({variables}), ex. BB1(%x1,%x2)
 Predicate get_head_predicate(MyBasicBlock * BB) {
+  
+  // Failed assert block
+  if (BB->isFalseBlock) {
+    return Predicate("false");
+  }
 
+  // Normal basic block header
   std::vector<std::string> vars;
   for (auto &v : BB->vars) {
     if (v->getValueID() != llvm::Value::ConstantIntVal) {
@@ -344,6 +387,11 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
   for (auto &it : my_blocks) {
     MyBasicBlock * BB = &it.second;
+    
+    // Skip failed assert basic blocks
+    if (BB->isFalseBlock) {
+      continue;
+    }
     
     // Load head predicate for current block
     Predicate current_predicate = get_head_predicate(BB);
