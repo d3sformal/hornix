@@ -56,10 +56,6 @@ struct MyBasicBlock {
   std::vector<std::uint8_t> successors;
   // Reference to last br instruction of basic block 
   llvm::Instruction * last_instruction;
-  // Coded instruction for basic block except phi
-  std::vector<Predicate> predicates;
-  // Boolean to see if instructions where transformed
-  bool transformed;
   // True if block calls wassert function and fails
   bool isFalseBlock;
 
@@ -67,7 +63,6 @@ struct MyBasicBlock {
     BB_link = BB_link_;
     name = name_;
     id = id_;
-    transformed = false;
     last_instruction = nullptr;
     isFalseBlock = false;
   }

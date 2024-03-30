@@ -293,11 +293,11 @@ std::vector<Predicate> transform_instructions(MyBasicBlock *BB) {
 }
 
 // Create Predicate for basic : Format {name}({variables}), ex. BB1(%x1,%x2)
-Predicate get_head_predicate(MyBasicBlock * BB) {
-  
+Predicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
+
   // Failed assert block
   if (BB->isFalseBlock) {
-    return Predicate("false");
+    return Predicate("BB_error()");
   }
 
   // Normal basic block header
@@ -310,7 +310,10 @@ Predicate get_head_predicate(MyBasicBlock * BB) {
     }
   }
 
-  return Predicate(BB->name, vars); 
+  std::string suffix = isEntry ? "_entry" : "_exit" ;
+    
+  return Predicate(BB->name + suffix, vars);
+
 }
 
 // Create first implication for function input and transfer to BB1 
@@ -319,13 +322,13 @@ std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock 
   std::vector<Implication> result;
 
   // Create basic block for entry
-  MyBasicBlock BB_entry(nullptr, "BBentry", 0);
+  MyBasicBlock BB_entry(nullptr, "BB0", 0);
   // Load arguments as variables
   for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
     add_variable(arg, &BB_entry);
   }
 
-  Predicate predicate = get_head_predicate(&BB_entry);
+  Predicate predicate = get_head_predicate(&BB_entry, true);
 
   // Create first implication (true -> BBentry(x1,..))
   Implication imp(predicate);
@@ -333,13 +336,8 @@ std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock 
   result.push_back(imp);
   
   // Create transfer to BB1 
-  Implication imp1(get_head_predicate(BB1));
+  Implication imp1(get_head_predicate(BB1, true));
   imp1.predicates.push_back(predicate);
-  if (!BB1->transformed) {
-    BB1->predicates = transform_instructions(BB1);
-    BB1->transformed = true;
-  }
-  add_predicates_to_implication(&BB1->predicates, &imp1);
   result.push_back(imp1);
 
   return result;
@@ -379,32 +377,31 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
     if (BB->isFalseBlock) {
       continue;
     }
-    
-    // Load head predicate for current block
-    Predicate current_predicate = get_head_predicate(BB);
 
+    // Create implication of current basic block (entry -> exit)
+    Predicate entry_predicate = get_head_predicate(BB, true);
+    Predicate exit_predicate = get_head_predicate(BB, false);
+    Implication imp(exit_predicate);
+    imp.predicates.push_back(entry_predicate);
+    auto predicates = transform_instructions(BB);
+    add_predicates_to_implication(&predicates, &imp);
+    result.push_back(imp);
+    
+    // Create implications for transfers to successors
     for (auto &succ : BB->successors) {
       auto successor = &my_blocks[succ];
 
       // Create implication
-      Implication imp(get_head_predicate(successor));
+      Implication imp(get_head_predicate(successor, true));
 
-      // Load predicates from instructions
-      // Current BB predicate
-      imp.predicates.push_back(current_predicate);
+      // Current BB exit predicate
+      imp.predicates.push_back(exit_predicate);
 
       // Branch predicate if 2 successors
       if (BB->last_instruction != nullptr && BB->successors.size() == 2) {
-        imp.predicates.push_back(
-            Predicate(transform_br(BB->last_instruction, successor->BB_link)));
+         imp.predicates.push_back(
+              Predicate(transform_br(BB->last_instruction, successor->BB_link)));
       }
-
-      // Transform instructions of successor
-      if (!successor->transformed) {
-        successor->predicates = transform_instructions(successor);
-        successor->transformed = true;
-      }
-      add_predicates_to_implication(&successor->predicates, &imp);
 
       // Translate phi instructions
       auto predicates = transform_phi_instructions(BB, successor);
@@ -413,6 +410,12 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
       result.push_back(imp); 
     }
   }
+
+  // Add error case implication
+  Implication i = Implication(Predicate("BB_error()"));
+  i.predicates.push_back(Predicate("false"));
+  result.push_back(i);
+
   return result;
 }
 #pragma endregion
