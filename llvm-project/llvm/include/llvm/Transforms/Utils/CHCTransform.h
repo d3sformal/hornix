@@ -5,38 +5,62 @@
 
 namespace llvm {
 
-enum MyPredicateType {
-  BasicBlockHead,
-  Expression,
-  Unknown
+struct UnaryPredicate {
+  std::string name;
+  std::string value;
+  
+  UnaryPredicate(std::string name_, std::string value_) { 
+    name = name_;
+    value = value_;
+  }
+
+  std::string Print() {
+    return name + " = " + value;
+  }
 };
 
-struct Predicate {
+struct BinaryPredicate {
+  std::string name;
+  std::string operand1;
+  std::string sign;
+  std::string operand2;
+
+  BinaryPredicate(std::string name_, std::string op1, std::string sign_,
+                 std::string op2) {
+    name = name_;
+    operand1 = op1;
+    sign = sign_;
+    operand2 = op2;
+  }
+
+  std::string Print() {
+    return name + " = " + operand1 + " " + sign + " " + operand2;
+  }
+};
+
+struct HeadPredicate {
   std::string name;
   std::vector<std::string> vars;
-  std::string exp;
-  MyPredicateType type;
-
-  Predicate(std::string expression) { 
-    exp = expression;
-    type = MyPredicateType::Expression;
-  }
-
-  Predicate(std::string name_, std::vector<std::string> vars_) {
+  
+  HeadPredicate(std::string name_, std::vector<std::string> vars_) {
     name = name_;
     vars = vars_;
-    type = MyPredicateType::BasicBlockHead;
   }
 
-  Predicate() { type = MyPredicateType::Unknown;
-  }
+  HeadPredicate() {}
+};
+
+struct Predicates {
+  std::vector<UnaryPredicate> unary;
+  std::vector<BinaryPredicate> binary;
+  std::vector<HeadPredicate> head;
 };
 
 struct Implication {
-  std::vector<Predicate> predicates;
-  Predicate head;
+  Predicates predicates;
+  HeadPredicate head;
 
-  Implication(Predicate head_) {
+  Implication(HeadPredicate head_) {
     head = head_;
   }
 };
