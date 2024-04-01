@@ -5,6 +5,18 @@
 
 namespace llvm {
 
+struct MyVariable {
+  std::string name;
+  std::string type;
+
+  MyVariable(std::string name_, std::string type_) {
+    name = name_;
+    type = type_;
+  }
+
+  MyVariable() {}
+};
+
 struct UnaryPredicate {
   std::string name;
   std::string value;
@@ -40,11 +52,15 @@ struct BinaryPredicate {
 
 struct HeadPredicate {
   std::string name;
-  std::vector<std::string> vars;
+  std::vector<MyVariable> vars;
   
-  HeadPredicate(std::string name_, std::vector<std::string> vars_) {
+  HeadPredicate(std::string name_, std::vector<MyVariable> vars_) {
     name = name_;
     vars = vars_;
+  }
+
+  HeadPredicate(std::string name_) { 
+    name = name_;
   }
 
   HeadPredicate() {}

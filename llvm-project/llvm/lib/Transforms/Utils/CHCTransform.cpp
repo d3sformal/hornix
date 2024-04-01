@@ -4,10 +4,12 @@
 #include "llvm/IR/Instructions.h"
 #include "iostream"
 #include <map>
+#include <unordered_set>
 
 using namespace llvm;
 
 int var_index = 0;
+auto &output = std::cout;
 
 #pragma region Create my basic blocks
 // Set name for variable and add to basic block info if not presented 
@@ -179,6 +181,18 @@ std::string convert_name_to_string(Value *BB) {
   return string_stream.str();
 }
 
+std::string get_type(Type *type) { 
+  if (type->isIntegerTy()) {
+    auto w = cast<IntegerType>(type)->getBitWidth();
+    if (w == 1) {
+      return "Bool";
+    }
+    return "Int";
+  } else {
+    return "Dif";
+  }
+}
+
 // Transform Cmp instruction
 std::string cmp_sign(Instruction *I) { 
   std::string sign;
@@ -280,16 +294,19 @@ HeadPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
 
   // Failed assert block
   if (BB->isFalseBlock) {
-    return HeadPredicate("BB_error", std::vector<std::string>());
+    return HeadPredicate("BB_error");
   }
 
   // Normal basic block header
-  std::vector<std::string> vars;
+  std::vector<MyVariable> vars;
   std::string var_name;
+  std::string var_type;
   for (auto &v : BB->vars) {
     if (v->getValueID() != Value::ConstantIntVal) {
       var_name = convert_name_to_string(v);
-      vars.push_back(var_name);
+      var_type = get_type(v->getType());
+      
+      vars.push_back(MyVariable(var_name, var_type));
     }
   }
 
@@ -316,7 +333,7 @@ std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock 
   // Create first implication (true -> BBentry(x1,..))
   Implication imp(predicate);  
   imp.predicates.head.push_back(
-      HeadPredicate("true", std::vector<std::string>()));
+      HeadPredicate("true"));
 
   result.push_back(imp);
   
@@ -397,21 +414,21 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
   }
 
   // Add error case implication
-  Implication i = Implication(HeadPredicate("BB_error", std::vector<std::string>()));
+  Implication i = Implication(HeadPredicate("false"));
   i.predicates.head.push_back(
-      HeadPredicate("false", std::vector<std::string>()));
+      HeadPredicate("BB_error"));
   result.push_back(i);
 
   return result;
 }
 #pragma endregion
 
-#pragma region Print basic block
+#pragma region Print implication
 void print_head_predicate(HeadPredicate *p) {
   errs() << p->name; 
   
   if (p->vars.size() > 0) {
-    errs() << "(";
+    errs() << "( ";
     auto first = 1;
     for (auto &v : p->vars) {
       if (!first) {
@@ -419,9 +436,9 @@ void print_head_predicate(HeadPredicate *p) {
       } else {
          first = 0;
       }
-      errs() << v;
+      errs() << v.name ;
     }
-    errs() << ")";
+    errs() << " )";
   }
 }
 
@@ -479,6 +496,172 @@ void print_implications(std::vector<Implication> implications)
 }
 #pragma endregion
 
+#pragma region Print SMT-LIB2 format
+void smt_declare_function(HeadPredicate *predicate) { 
+  output << "(declare-fun |" << predicate->name << "| (";
+
+  for (auto v : predicate->vars) {
+    output << " " << v.type;
+  }
+
+  output << ") Bool )" << std::endl;
+}
+
+void smt_declare_functions(std::vector<Implication> *implications) { 
+  std::unordered_set<std::string> declared; 
+
+  for (auto imp : *implications) {
+    auto search = declared.find(imp.head.name);
+    if (imp.head.name != "false") {
+      if (search == declared.end()) {
+        smt_declare_function(&imp.head);
+        declared.insert(imp.head.name);
+      }
+    }
+  }
+}
+
+void smt_print_head_predicate(HeadPredicate* predicate) { 
+  auto var_size = predicate->vars.size();
+  if (var_size > 0) {
+    output << "(";
+  }
+  
+  output << predicate->name;
+  for (auto v : predicate->vars) {
+    output << " " << v.name;
+  }
+  if (var_size > 0) {
+    output << " )";
+  }
+}
+
+void smt_print_unary_predicate(UnaryPredicate *predicate) {
+  output << "(= " << predicate->name << " " << predicate->value << " )";
+}
+
+void smt_print_binary_predicate(BinaryPredicate *predicate) {
+  output << "(= " << predicate->name 
+         << " (" << predicate->sign << " "
+         << predicate->operand1 << " " 
+         << predicate->operand2
+    << " ))";
+}
+
+void smt_print_predicate_by_index(Predicates* predicates, int index) {
+  if (index < predicates->head.size()) {
+    smt_print_head_predicate(&predicates->head[index]);
+  } else if (index >= predicates->head.size() &&
+             index < predicates->head.size() + predicates->unary.size()) {
+    smt_print_unary_predicate(
+        &predicates->unary[index - predicates->head.size()]);
+  } else if (index >= predicates->head.size() + predicates->unary.size() &&
+             index < predicates->head.size() + predicates->unary.size() +
+                         predicates->binary.size()) {
+    smt_print_binary_predicate(
+        &predicates->binary[index - predicates->head.size() -
+                            predicates->unary.size()]);
+  }
+}
+
+void smt_print_predicates(Predicates *predicates) { 
+  auto predicate_size = predicates->head.size() + predicates->unary.size() +
+                        predicates->binary.size();
+  
+  if (predicate_size == 1) {
+    smt_print_predicate_by_index(predicates, 0);
+  } else {
+    int index = 0;
+    while (predicate_size - 1> index) {
+      output << "(and ";
+
+      smt_print_predicate_by_index(predicates, index);
+
+      ++index;
+    }
+
+    smt_print_predicate_by_index(predicates, index);
+    output << std::string(predicate_size - 1, ')');
+  }
+} 
+
+int smt_quantifiers(Implication *imp, int indent) {
+  std::unordered_map<std::string, std::string> vars;
+  for (auto v : imp->head.vars) {
+    auto search = vars.find(v.name);
+    if (search == vars.end()) {
+      vars.insert(std::pair<std::string, std::string>(v.name, v.type));
+    }
+  }
+  for (auto h : imp->predicates.head) {
+    for (auto v : h.vars) {
+      auto search = vars.find(v.name);
+      if (search == vars.end()) {
+        vars.insert(std::pair<std::string, std::string>(v.name, v.type));
+      }
+    }
+  }
+
+  if (vars.size() > 0) {
+    output << std::string(indent++, ' ') << "(forall ( ";
+    for (auto v : vars) {
+      output << "( " << v.first << " " << v.second << " )";
+    }
+    output << " )" << std::endl;
+  }
+
+  return indent;
+}
+
+void smt_declare_implication(Implication* implication) { 
+  int indent = 0;
+  output << std::string(indent++, ' ') << "(assert " << std::endl;
+  
+  indent =smt_quantifiers(implication, indent);
+
+  output << std::string(indent++, ' ') << "(=>  " << std::endl;
+
+  //Predicates
+  output << std::string(indent, ' ');
+  smt_print_predicates(&implication->predicates);
+  output << std::endl;
+  
+  //Head of implication
+  output << std::string(indent, ' ');
+  smt_print_head_predicate(&implication->head);
+  output << std::endl;
+  indent--;
+  
+  while (indent >= 0) {
+    output << std::string(indent--, ' ') << ")" << std::endl;
+  }
+}
+
+void smt_declare_implications(std::vector<Implication> *implications) { 
+  for (auto imp : *implications) {
+    smt_declare_implication(&imp);
+  }
+}
+
+void smt_print_implications(std::vector<Implication> *implications) {
+  
+  output << "(set-logic HORN)" << std::endl;
+  output << "(set-info :status sat)"
+         << std::endl 
+         << std::endl;
+  
+  smt_declare_functions(implications);
+  output << std::endl;
+
+  smt_declare_implications(implications);
+
+  output << std::endl;
+  output << "(check-sat)" << std::endl;
+
+}
+
+#pragma endregion
+
 PreservedAnalyses CHCTransformPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
   
@@ -486,8 +669,13 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   auto implications = transform_basic_blocks(my_blocks, F);
 
-  //PrintInfo(my_blocks);
-  print_implications(implications);
+  //print_info(my_blocks);
+    
+  //print_implications(implications);
  
+  //output << "SMT-LIB2: " << std::endl;
+
+  smt_print_implications(&implications);
+
   return PreservedAnalyses::all();
 }
