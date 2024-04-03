@@ -41,10 +41,10 @@
  )
 )
 (assert 
- (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool ) )
+ (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %x4a Bool ) )
   (=>  
-   (and (BB2_entry %.01 %x1 %.0 %x3 %x4 )(= %x4 ( <  %.01 10 )))
-   (BB2_exit %.01 %x1 %.0 %x3 %x4 )
+   (and (BB2_entry %.01 %x1 %.0 %x3 %x4 )(= %x4a ( <  %.01 10 )))
+   (BB2_exit %.01 %x1 %.0 %x3 %x4a )
   )
  )
 )
@@ -65,26 +65,26 @@
  )
 )
 (assert 
- (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool ) )
+ (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %x3a Int )( %x1a Int ) )
   (=>  
-   (and (BB3_entry %.01 %x1 %.0 %x3 %x4 )(= %x3 (+ %.0 %.01 ))(= %x1 (+ %.01 1 )))
-   (BB3_exit %.01 %x1 %.0 %x3 %x4 )
+   (and (BB3_entry %.01 %x1 %.0 %x3 %x4 )(= %x3a (+ %.0 %.01 ))(= %x1a (+ %.01 1 )))
+   (BB3_exit %.01 %x1a %.0 %x3a %x4 )
   )
  )
 )
 (assert 
- (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool ) )
+ (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %.01a Int )( %.0a Int ) )
   (=>  
-   (and (BB3_exit %.01 %x1 %.0 %x3 %x4 )(= %.01 %x1 )(= %.0 %x3 ))
-   (BB2_entry %.01 %x1 %.0 %x3 %x4 )
+   (and (BB3_exit %.01 %x1 %.0 %x3 %x4 )(= %.01a %x1 )(= %.0a %x3 ))
+   (BB2_entry %.01a %x1 %.0a %x3 %x4 )
   )
  )
 )
 (assert 
- (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %x13 Bool ) )
+ (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %x13 Bool )( %x13a Bool ) )
   (=>  
-   (and (BB4_entry %.01 %x1 %.0 %x3 %x4 %x13 )(= %x13 ( <  %.0 %.01 )))
-   (BB4_exit %.01 %x1 %.0 %x3 %x4 %x13 )
+   (and (BB4_entry %.01 %x1 %.0 %x3 %x4 %x13 )(= %x13a ( <  %.0 %.01 )))
+   (BB4_exit %.01 %x1 %.0 %x3 %x4 %x13a )
   )
  )
 )

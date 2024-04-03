@@ -10,97 +10,97 @@
 (declare-fun |BB4_entry| ( Bool Int Int Int Bool) Bool )
 (declare-fun |BB3_exit| ( Bool Int Int) Bool )
 (declare-fun |BB4_exit| ( Bool Int Int Int Bool) Bool )
-(declare-fun |BB5_entry| ( Bool Int Int Int Bool Bool) Bool )
+(declare-fun |BB5_entry| ( Bool Bool Int Int Int Bool) Bool )
 (declare-fun |BB_error| () Bool )
-(declare-fun |BB5_exit| ( Bool Int Int Int Bool Bool) Bool )
-(declare-fun |BB7_entry| ( Bool Int Int Int Bool Bool Bool) Bool )
-(declare-fun |BB7_exit| ( Bool Int Int Int Bool Bool Bool) Bool )
+(declare-fun |BB5_exit| ( Bool Bool Int Int Int Bool) Bool )
+(declare-fun |BB7_entry| ( Bool Bool Int Int Int Bool Bool) Bool )
+(declare-fun |BB7_exit| ( Bool Bool Int Int Int Bool Bool) Bool )
 
 (assert 
- (forall ( ( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x2 Int )( %x1 Int ) )
   (=>  
    true
-   (BB0_entry %x1 %x2 )
+   (BB0_entry %x2 %x1 )
   )
  )
 )
 (assert 
  (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
   (=>  
-   (BB0_entry %x1 %x2 )
+   (BB0_entry %x2 %x1 )
    (BB1_entry %x0 %x1 %x2 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x0 Bool )( %x0p Bool )( %x1 Int )( %x2 Int ) )
   (=>  
-   (and (BB1_entry %x0 %x1 %x2 )(= %x0 ( >  %x1 %x2 )))
-   (BB1_exit %x0 %x1 %x2 )
+   (and (BB1_entry %x0 %x1 %x2 )(= %x0p ( >  %x1 %x2 )))
+   (BB1_exit %x0p %x1 %x2 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x0 Bool )( %x2 Int )( %x1 Int ) )
   (=>  
    (and (BB1_exit %x0 %x1 %x2 )(= %x0 true ))
-   (BB2_entry %x0 %x1 %x2 )
+   (BB2_entry %x0 %x2 %x1 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x0 Bool )( %x2 Int )( %x1 Int ) )
   (=>  
    (and (BB1_exit %x0 %x1 %x2 )(= %x0 false ))
-   (BB3_entry %x0 %x1 %x2 )
+   (BB3_entry %x0 %x2 %x1 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x0 Bool )( %x2 Int )( %x1 Int ) )
   (=>  
-   (BB2_entry %x0 %x1 %x2 )
-   (BB2_exit %x0 %x1 %x2 )
+   (BB2_entry %x0 %x2 %x1 )
+   (BB2_exit %x0 %x2 %x1 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool ) )
+ (forall ( ( %x0 Bool )( %x1 Int )( %.0p Int )( %x2 Int )( %x3 Bool ) )
   (=>  
-   (and (BB2_exit %x0 %x1 %x2 )(= %.0 %x1 ))
-   (BB4_entry %x0 %x1 %x2 %.0 %x3 )
+   (and (BB2_exit %x0 %x2 %x1 )(= %.0p %x1 ))
+   (BB4_entry %x0 %x1 %.0p %x2 %x3 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %x2 Int ) )
+ (forall ( ( %x0 Bool )( %x2 Int )( %x1 Int ) )
   (=>  
-   (BB3_entry %x0 %x1 %x2 )
-   (BB3_exit %x0 %x1 %x2 )
+   (BB3_entry %x0 %x2 %x1 )
+   (BB3_exit %x0 %x2 %x1 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool ) )
+ (forall ( ( %x0 Bool )( %x1 Int )( %.0p Int )( %x2 Int )( %x3 Bool ) )
   (=>  
-   (and (BB3_exit %x0 %x1 %x2 )(= %.0 %x2 ))
-   (BB4_entry %x0 %x1 %x2 %.0 %x3 )
+   (and (BB3_exit %x0 %x2 %x1 )(= %.0p %x2 ))
+   (BB4_entry %x0 %x1 %.0p %x2 %x3 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool ) )
+ (forall ( ( %x0 Bool )( %x3p Bool )( %x1 Int )( %x2 Int )( %.0 Int )( %x3 Bool ) )
   (=>  
-   (and (BB4_entry %x0 %x1 %x2 %.0 %x3 )(= %x3 ( <=  %.0 %x1 )))
-   (BB4_exit %x0 %x1 %x2 %.0 %x3 )
+   (and (BB4_entry %x0 %x1 %.0 %x2 %x3 )(= %x3p ( <=  %.0 %x1 )))
+   (BB4_exit %x0 %x1 %.0 %x2 %x3p )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x4 Bool ) )
+ (forall ( ( %x0 Bool )( %x4 Bool )( %x2 Int )( %.0 Int )( %x1 Int )( %x3 Bool ) )
   (=>  
    (and (BB4_exit %x0 %x1 %x2 %.0 %x3 )(= %x3 true ))
-   (BB5_entry %x0 %x1 %x2 %.0 %x3 %x4 )
+   (BB5_entry %x0 %x4 %.0 %x2 %x1 %x3 )
   )
  )
 )
@@ -113,34 +113,34 @@
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x4 Bool ) )
+ (forall ( ( %x0 Bool )( %x4 Bool )( %x4p Bool )( %.0 Int )( %x2 Int )( %x1 Int )( %x3 Bool ) )
   (=>  
-   (and (BB5_entry %x0 %x1 %x2 %.0 %x3 %x4 )(= %x4 ( <=  %.0 %x2 )))
-   (BB5_exit %x0 %x1 %x2 %.0 %x3 %x4 )
+   (and (BB5_entry %x0 %x4 %x2 %.0 %x1 %x3 )(= %x4p ( <=  %.0 %x2 )))
+   (BB5_exit %x0 %x4p %x2 %.0 %x1 %x3 )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x4 Bool )( %x5 Bool ) )
+ (forall ( ( %x4 Bool )( %x0 Bool )( %x1 Int )( %x2 Int )( %.0 Int )( %x3 Bool )( %x5p Bool ) )
   (=>  
-   (and (BB5_exit %x0 %x1 %x2 %.0 %x3 %x4 )(= %x4 true )(= %x5 true ))
-   (BB7_entry %x0 %x1 %x2 %.0 %x3 %x4 %x5 )
+   (and (BB5_exit %x0 %x4 %x2 %.0 %x1 %x3 )(= %x5p true )(= %x4 true ))
+   (BB7_entry %x4 %x0 %x1 %.0 %x2 %x3 %x5p )
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x4 Bool ) )
+ (forall ( ( %x0 Bool )( %x4 Bool )( %.0 Int )( %x2 Int )( %x1 Int )( %x3 Bool ) )
   (=>  
-   (and (BB5_exit %x0 %x1 %x2 %.0 %x3 %x4 )(= %x4 false ))
+   (and (BB5_exit %x0 %x4 %x2 %.0 %x1 %x3 )(= %x4 false ))
    BB_error
   )
  )
 )
 (assert 
- (forall ( ( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x4 Bool )( %x5 Bool ) )
+ (forall ( ( %x4 Bool )( %x0 Bool )( %x1 Int )( %.0 Int )( %x2 Int )( %x3 Bool )( %x5 Bool ) )
   (=>  
-   (BB7_entry %x0 %x1 %x2 %.0 %x3 %x4 %x5 )
-   (BB7_exit %x0 %x1 %x2 %.0 %x3 %x4 %x5 )
+   (BB7_entry %x4 %x0 %x1 %.0 %x2 %x3 %x5 )
+   (BB7_exit %x4 %x0 %x1 %x2 %.0 %x3 %x5 )
   )
  )
 )

@@ -8,7 +8,7 @@
 
 using namespace llvm;
 
-const auto PRIME_SIGN = 'x';
+const auto PRIME_SIGN = 'p';
 int var_index = 0;
 auto &output = std::cout;
 
