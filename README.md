@@ -2,7 +2,7 @@
 
 
 
-## Getting started
+## **Getting started**
 
 #### Download LLVM 
 
@@ -33,3 +33,24 @@
 ### Official documentation for LLVM start 
 
 https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm
+
+
+
+## **Using pass**
+
+1. Compile using clang with minimal number of passes: ` clang++ -Xclang -disable-O0-optnone -S -emit-llvm {source code} -o {output file}`
+2. Use passes. First, pass to move memory allocation to registers (mem2reg) and then my pass(chc-transform): `opt -S {input file} -passes=mem2reg,chc-transform -o {output file}` 
+
+
+
+For example, source code file *example.cpp* :
+
+```
+clang++ -Xclang -disable-O0-optnone -S -emit-llvm example.cpp -o example.ll
+opt -S example.ll -passes=mem2reg,chc-transform -o example.ll
+```
+
+
+
+
+

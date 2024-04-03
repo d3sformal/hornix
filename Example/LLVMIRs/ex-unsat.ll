@@ -1,14 +1,14 @@
-; ModuleID = 'example.cpp'
-source_filename = "example.cpp"
+; ModuleID = '../example.cpp'
+source_filename = "../example.cpp"
 target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-windows-msvc19.38.33134"
 
-$"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
+$"??_C@_1BO@JJJCPCD@?$AA?4?$AA?4?$AA?1?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
 
-$"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@" = comdat any
+$"??_C@_1M@CKMIGBFI@?$AAx?$AA?5?$AA?$DM?$AA?5?$AAy?$AA?$AA@" = comdat any
 
-@"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [12 x i16] [i16 101, i16 120, i16 97, i16 109, i16 112, i16 108, i16 101, i16 46, i16 99, i16 112, i16 112, i16 0], comdat, align 2
-@"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [6 x i16] [i16 120, i16 32, i16 62, i16 32, i16 121, i16 0], comdat, align 2
+@"??_C@_1BO@JJJCPCD@?$AA?4?$AA?4?$AA?1?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [15 x i16] [i16 46, i16 46, i16 47, i16 101, i16 120, i16 97, i16 109, i16 112, i16 108, i16 101, i16 46, i16 99, i16 112, i16 112, i16 0], comdat, align 2
+@"??_C@_1M@CKMIGBFI@?$AAx?$AA?5?$AA?$DM?$AA?5?$AAy?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [6 x i16] [i16 120, i16 32, i16 60, i16 32, i16 121, i16 0], comdat, align 2
 
 ; Function Attrs: mustprogress noinline uwtable
 define dso_local void @"?fun@@YAXXZ"() #0 {
@@ -36,11 +36,11 @@ define dso_local void @"?fun@@YAXXZ"() #0 {
 12:                                               ; preds = %3
   %13 = load i32, ptr %1, align 4
   %14 = load i32, ptr %2, align 4
-  %15 = icmp sgt i32 %13, %14
+  %15 = icmp slt i32 %13, %14
   br i1 %15, label %17, label %16
 
 16:                                               ; preds = %12
-  call void @_wassert(ptr noundef @"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 34)
+  call void @_wassert(ptr noundef @"??_C@_1M@CKMIGBFI@?$AAx?$AA?5?$AA?$DM?$AA?5?$AAy?$AA?$AA@", ptr noundef @"??_C@_1BO@JJJCPCD@?$AA?4?$AA?4?$AA?1?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 34)
   br label %17
 
 17:                                               ; preds = %16, %12

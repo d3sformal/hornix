@@ -8,31 +8,30 @@
 //        return b;
 //}
 
-//int max(int a, int b)
-//{
-//    __int8 c;
-//    if (a > b)
-//        c = a > b;
-//    else
-//        c = a > b;
-//
-//    //assert(c >= a && c >= b);
-//    return c;
-//}
-
-
-void fun() 
+void max(int a, int b)
 {
-	int x = 1;
-	int y = 0;
+    int c;
+    if (a > b)
+        c = a;
+    else
+        c = b;
 
-	while (y < 10) {
-		x = x + y;
-		y = y + 1;
-	}
-
-	assert(x > y);
+    assert(c < a || c < b);
 }
+
+
+//void fun() 
+//{
+//	int x = 1;
+//	int y = 0;
+//
+//	while (y < 10) {
+//		x = x + y;
+//		y = y + 1;
+//	}
+//
+//	assert(x < y);
+//}
 
 //int add(int f)
 //{

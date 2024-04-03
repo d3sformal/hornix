@@ -571,17 +571,18 @@ void smt_print_predicates(Predicates *predicates) {
   if (predicate_size == 1) {
     smt_print_predicate_by_index(predicates, 0);
   } else {
-    int index = 0;
-    while (predicate_size - 1> index) {
       output << "(and ";
 
-      smt_print_predicate_by_index(predicates, index);
-
-      ++index;
-    }
-
-    smt_print_predicate_by_index(predicates, index);
-    output << std::string(predicate_size - 1, ')');
+      for (auto p: predicates->head) {
+        smt_print_head_predicate(&p);
+      }
+      for (auto p : predicates->unary) {
+        smt_print_unary_predicate(&p);
+      }
+      for (auto p : predicates->binary) {
+        smt_print_binary_predicate(&p);
+      }
+    output << ')';
   }
 } 
 
