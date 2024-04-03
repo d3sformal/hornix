@@ -83,7 +83,7 @@
 (assert 
  (forall ( ( %.01 Int )( %x1 Int )( %.0 Int )( %x3 Int )( %x4 Bool )( %x13 Bool ) )
   (=>  
-   (and (BB4_entry %.01 %x1 %.0 %x3 %x4 %x13 )(= %x13 ( =  %.0 %.01 )))
+   (and (BB4_entry %.01 %x1 %.0 %x3 %x4 %x13 )(= %x13 ( >  %.0 %.01 )))
    (BB4_exit %.01 %x1 %.0 %x3 %x4 %x13 )
   )
  )
@@ -120,4 +120,3 @@
 )
 
 (check-sat)
-(get-model)

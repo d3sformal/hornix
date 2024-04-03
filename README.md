@@ -47,7 +47,7 @@ For example, source code file *example.cpp* :
 
 ```
 clang++ -Xclang -disable-O0-optnone -S -emit-llvm example.cpp -o example.ll
-opt -S example.ll -passes=mem2reg,chc-transform -o example.ll
+opt -disable-output -S example.ll -passes=mem2reg,chc-transform > example.ll
 ```
 
 
