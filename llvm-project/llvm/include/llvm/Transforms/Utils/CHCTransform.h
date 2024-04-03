@@ -2,16 +2,25 @@
 #define LLVM_TRANSFORMS_CHCTRANSFORM_CHCTRANSFORM_H
 
 #include "llvm/IR/PassManager.h"
+#include <map>
 
 namespace llvm {
 
 struct MyVariable {
   std::string name;
   std::string type;
+  bool isPrime;
 
+  MyVariable(std::string name_, std::string type_, bool isPrime_) {
+    name = name_;
+    type = type_;
+    isPrime = isPrime_;
+  }
+  
   MyVariable(std::string name_, std::string type_) {
     name = name_;
     type = type_;
+    isPrime = false;
   }
 
   MyVariable() {}
@@ -52,9 +61,9 @@ struct BinaryPredicate {
 
 struct HeadPredicate {
   std::string name;
-  std::vector<MyVariable> vars;
+  std::unordered_map<std::string, MyVariable> vars;
   
-  HeadPredicate(std::string name_, std::vector<MyVariable> vars_) {
+  HeadPredicate(std::string name_, std::unordered_map<std::string, MyVariable> vars_) {
     name = name_;
     vars = vars_;
   }

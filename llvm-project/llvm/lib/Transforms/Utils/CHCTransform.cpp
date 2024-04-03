@@ -8,6 +8,7 @@
 
 using namespace llvm;
 
+const auto PRIME_SIGN = 'x';
 int var_index = 0;
 auto &output = std::cout;
 
@@ -181,6 +182,7 @@ std::string convert_name_to_string(Value *BB) {
   return string_stream.str();
 }
 
+// Get type of variable
 std::string get_type(Type *type) { 
   if (type->isIntegerTy()) {
     auto w = cast<IntegerType>(type)->getBitWidth();
@@ -298,7 +300,7 @@ HeadPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
   }
 
   // Normal basic block header
-  std::vector<MyVariable> vars;
+  std::unordered_map<std::string, MyVariable> vars;
   std::string var_name;
   std::string var_type;
   for (auto &v : BB->vars) {
@@ -306,7 +308,7 @@ HeadPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
       var_name = convert_name_to_string(v);
       var_type = get_type(v->getType());
       
-      vars.push_back(MyVariable(var_name, var_type));
+      vars.insert(std::pair<std::string, MyVariable>(var_name, MyVariable(var_name, var_type)));
     }
   }
 
@@ -363,6 +365,30 @@ std::vector<UnaryPredicate> transform_phi_instructions(MyBasicBlock *predecessor
   return result;
 }
 
+// Create implication from entry to exit point in basic block
+Implication create_entry_to_exit(MyBasicBlock *BB) {
+  HeadPredicate entry_predicate = get_head_predicate(BB, true);
+  HeadPredicate exit_predicate = get_head_predicate(BB, false);
+  
+  auto predicates = transform_instructions(BB);
+  
+  // Find changed variables
+  for (unsigned int i = 0; i < predicates.unary.size(); i++) {
+    exit_predicate.vars[predicates.unary[i].name].isPrime = true;
+    predicates.unary[i].name = predicates.unary[i].name + PRIME_SIGN;
+  }
+  for (unsigned int i = 0; i < predicates.binary.size(); i++) {
+    exit_predicate.vars[predicates.binary[i].name].isPrime = true;
+    predicates.binary[i].name = predicates.binary[i].name + PRIME_SIGN;
+  }
+
+  // Create implication
+  Implication imp(exit_predicate);
+  imp.predicates = predicates;
+  imp.predicates.head.push_back(entry_predicate);
+  return imp;
+}
+
 // Transform basic blocks to implications
 std::vector<Implication>
 transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
@@ -380,33 +406,35 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
     }
 
     // Create implication of current basic block (entry -> exit)
-    HeadPredicate entry_predicate = get_head_predicate(BB, true);
-    HeadPredicate exit_predicate = get_head_predicate(BB, false);
-    Implication imp(exit_predicate);
-    imp.predicates = transform_instructions(BB);
-    imp.predicates.head.push_back(entry_predicate);
-    result.push_back(imp);
+    result.push_back(create_entry_to_exit(BB));
     
+    HeadPredicate current_exit_predicate = get_head_predicate(BB, false);
+
     // Create implications for transfers to successors
     for (auto &succ : BB->successors) {
       auto successor = &my_blocks[succ];
+      auto succ_predicate = get_head_predicate(successor, true);
+      
+      // Translate phi instructions
+      auto phi_predicates = transform_phi_instructions(BB, successor);
+      // Find changed variables
+      for (unsigned int i = 0; i < phi_predicates.size(); i++) {
+        succ_predicate.vars[phi_predicates[i].name].isPrime = true;
+        phi_predicates[i].name = phi_predicates[i].name + PRIME_SIGN;        
+      }
 
       // Create implication
-      Implication imp(get_head_predicate(successor, true));
+      Implication imp(succ_predicate);
+
+      imp.predicates.unary = phi_predicates;
 
       // Current BB exit predicate
-      imp.predicates.head.push_back(exit_predicate);
+      imp.predicates.head.push_back(current_exit_predicate);
 
       // Branch predicate if 2 successors
       if (BB->last_instruction != nullptr && BB->successors.size() == 2) {
          imp.predicates.unary.push_back(
-              transform_br(BB->last_instruction, successor->BB_link));
-      }
-
-      // Translate phi instructions
-      auto predicates = transform_phi_instructions(BB, successor);
-      for (auto p : predicates) {
-         imp.predicates.unary.push_back(p);
+             transform_br(BB->last_instruction, successor->BB_link));
       }
       
       result.push_back(imp); 
@@ -436,7 +464,7 @@ void print_head_predicate(HeadPredicate *p) {
       } else {
          first = 0;
       }
-      errs() << v.name ;
+      errs() << v.second.name ;
     }
     errs() << " )";
   }
@@ -496,17 +524,19 @@ void print_implications(std::vector<Implication> implications)
 }
 #pragma endregion
 
-#pragma region Print SMT-LIB2 format
+#pragma region Print SMT-LIB format
+// Print function declaration
 void smt_declare_function(HeadPredicate *predicate) { 
   output << "(declare-fun |" << predicate->name << "| (";
 
   for (auto v : predicate->vars) {
-    output << " " << v.type;
+    output << " " << v.second.type;
   }
 
   output << ") Bool )" << std::endl;
 }
 
+// Declare basic blocks as functions
 void smt_declare_functions(std::vector<Implication> *implications) { 
   std::unordered_set<std::string> declared; 
 
@@ -521,6 +551,7 @@ void smt_declare_functions(std::vector<Implication> *implications) {
   }
 }
 
+// Print HeadPredicate
 void smt_print_head_predicate(HeadPredicate* predicate) { 
   auto var_size = predicate->vars.size();
   if (var_size > 0) {
@@ -529,17 +560,20 @@ void smt_print_head_predicate(HeadPredicate* predicate) {
   
   output << predicate->name;
   for (auto v : predicate->vars) {
-    output << " " << v.name;
+    auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
+    output << " " << name;
   }
   if (var_size > 0) {
     output << " )";
   }
 }
 
+// Print UnaryPredicate
 void smt_print_unary_predicate(UnaryPredicate *predicate) {
   output << "(= " << predicate->name << " " << predicate->value << " )";
 }
 
+// Print BinaryPredicate
 void smt_print_binary_predicate(BinaryPredicate *predicate) {
   output << "(= " << predicate->name 
          << " (" << predicate->sign << " "
@@ -548,28 +582,26 @@ void smt_print_binary_predicate(BinaryPredicate *predicate) {
     << " ))";
 }
 
-void smt_print_predicate_by_index(Predicates* predicates, int index) {
-  if (index < predicates->head.size()) {
-    smt_print_head_predicate(&predicates->head[index]);
-  } else if (index >= predicates->head.size() &&
-             index < predicates->head.size() + predicates->unary.size()) {
+// Print first predicate from implication
+void smt_print_first_predicate(Predicates* predicates) {
+  if (predicates->head.size() > 0) {
+    smt_print_head_predicate(&predicates->head[0]);
+  } else if (predicates->unary.size() > 0) {
     smt_print_unary_predicate(
-        &predicates->unary[index - predicates->head.size()]);
-  } else if (index >= predicates->head.size() + predicates->unary.size() &&
-             index < predicates->head.size() + predicates->unary.size() +
-                         predicates->binary.size()) {
+        &predicates->unary[0]);
+  } else if (predicates->binary.size() > 0) {
     smt_print_binary_predicate(
-        &predicates->binary[index - predicates->head.size() -
-                            predicates->unary.size()]);
+        &predicates->binary[0]);
   }
 }
 
+// Print all predicates from implication
 void smt_print_predicates(Predicates *predicates) { 
   auto predicate_size = predicates->head.size() + predicates->unary.size() +
                         predicates->binary.size();
   
   if (predicate_size == 1) {
-    smt_print_predicate_by_index(predicates, 0);
+    smt_print_first_predicate(predicates);
   } else {
       output << "(and ";
 
@@ -586,23 +618,31 @@ void smt_print_predicates(Predicates *predicates) {
   }
 } 
 
+// Print all variables from implication. All variables are in head predicates.
 int smt_quantifiers(Implication *imp, int indent) {
   std::unordered_map<std::string, std::string> vars;
+  
+  // Variables from head of implication 
   for (auto v : imp->head.vars) {
-    auto search = vars.find(v.name);
+    auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
+    auto search = vars.find(name);
     if (search == vars.end()) {
-      vars.insert(std::pair<std::string, std::string>(v.name, v.type));
+      vars.insert(std::pair<std::string, std::string>(name, v.second.type));
     }
   }
+  
+  // Variables from head predicates from predicates
   for (auto h : imp->predicates.head) {
     for (auto v : h.vars) {
-      auto search = vars.find(v.name);
+      auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
+      auto search = vars.find(name);
       if (search == vars.end()) {
-        vars.insert(std::pair<std::string, std::string>(v.name, v.type));
+        vars.insert(std::pair<std::string, std::string>(name, v.second.type));
       }
     }
   }
 
+  // Print variables
   if (vars.size() > 0) {
     output << std::string(indent++, ' ') << "(forall ( ";
     for (auto v : vars) {
@@ -614,36 +654,41 @@ int smt_quantifiers(Implication *imp, int indent) {
   return indent;
 }
 
+// Create assert for implication
 void smt_declare_implication(Implication* implication) { 
   int indent = 0;
   output << std::string(indent++, ' ') << "(assert " << std::endl;
   
+  // Write all variables used in implication
   indent =smt_quantifiers(implication, indent);
 
   output << std::string(indent++, ' ') << "(=>  " << std::endl;
 
-  //Predicates
+  // Convert predicates
   output << std::string(indent, ' ');
   smt_print_predicates(&implication->predicates);
   output << std::endl;
   
-  //Head of implication
+  // Convert head of implication
   output << std::string(indent, ' ');
   smt_print_head_predicate(&implication->head);
   output << std::endl;
   indent--;
   
+  // Add ending parentheses
   while (indent >= 0) {
     output << std::string(indent--, ' ') << ")" << std::endl;
   }
 }
 
+// Convert implications
 void smt_declare_implications(std::vector<Implication> *implications) { 
   for (auto imp : *implications) {
     smt_declare_implication(&imp);
   }
 }
 
+// Convert my chc representation to SMT-LIB format
 void smt_print_implications(std::vector<Implication> *implications) {
   
   output << "(set-logic HORN)" << std::endl;
@@ -672,9 +717,9 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   //print_info(my_blocks);
     
-  //print_implications(implications);
+  print_implications(implications);
  
-  //output << "SMT-LIB2: " << std::endl;
+  //output << "SMT-LIB: " << std::endl;
 
   smt_print_implications(&implications);
 
