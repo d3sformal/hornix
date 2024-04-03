@@ -27,14 +27,8 @@ void add_variable(Value *var, MyBasicBlock* my_block) {
     ++var_index;
   }
 
-  // Find in basic block info
-  if (std::find(my_block->vars.begin(), my_block->vars.end(), var) !=
-      my_block->vars.end()) {
-    return;
-  }
-
   // Add to basic block info
-  my_block->vars.push_back(var);
+  my_block->vars.insert(var);
 }
 
 // Find id of basic block by reference to llvm class
@@ -78,7 +72,7 @@ load_basic_block_info(Function &F) {
       BB.setName(name);
       
       MyBasicBlock myBB(&BB, name, bb_index);
-      myBasicBlocks.insert(std::pair<std::uint8_t, MyBasicBlock>(bb_index, myBB));
+      myBasicBlocks.insert(std::make_pair(bb_index, myBB));
 
       ++bb_index;
     }
@@ -308,7 +302,7 @@ HeadPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
       var_name = convert_name_to_string(v);
       var_type = get_type(v->getType());
       
-      vars.insert(std::pair<std::string, MyVariable>(var_name, MyVariable(var_name, var_type)));
+      vars.insert(std::make_pair(var_name, MyVariable(var_name, var_type)));
     }
   }
 
@@ -625,20 +619,14 @@ int smt_quantifiers(Implication *imp, int indent) {
   // Variables from head of implication 
   for (auto v : imp->head.vars) {
     auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
-    auto search = vars.find(name);
-    if (search == vars.end()) {
-      vars.insert(std::pair<std::string, std::string>(name, v.second.type));
-    }
+    vars.insert(std::make_pair(name, v.second.type));
   }
   
   // Variables from head predicates from predicates
   for (auto h : imp->predicates.head) {
     for (auto v : h.vars) {
       auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
-      auto search = vars.find(name);
-      if (search == vars.end()) {
-        vars.insert(std::pair<std::string, std::string>(name, v.second.type));
-      }
+      vars.insert(std::make_pair(name, v.second.type));
     }
   }
 

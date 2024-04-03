@@ -3,6 +3,7 @@
 
 #include "llvm/IR/PassManager.h"
 #include <map>
+#include <unordered_set>
 
 namespace llvm {
 
@@ -98,7 +99,7 @@ struct MyBasicBlock {
   // Id of basic block
   std::uint8_t id;
   // List of references to variables used in instructions of basic block and its predecessors
-  std::vector<llvm::Value *> vars;
+  std::unordered_set<llvm::Value *> vars;
   // List of ids of predecessors of basic block
   std::vector<std::uint8_t> predecessors;
   // List of ids of successors of basic block
