@@ -705,7 +705,7 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   //print_info(my_blocks);
     
-  print_implications(implications);
+  //print_implications(implications);
  
   //output << "SMT-LIB: " << std::endl;
 

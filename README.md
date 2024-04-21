@@ -54,3 +54,16 @@ opt -disable-output -S example.ll -passes=mem2reg,chc-transform > example.ll
 
 
 
+## **Running verification using bash script**
+
+You can run program using bash script *chc-transform.sh*. It takes one argument, which is expected to be cpp or c source file. 
+
+For example: `./chc-transform.sh example.cpp`
+
+### Requirements
+
+To properly run the script you to build or download software
+
+1. clang version 17.0.1
+2. opt from LLVM with chc-transform pass built
+3. z3 solver
