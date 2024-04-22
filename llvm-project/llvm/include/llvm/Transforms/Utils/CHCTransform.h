@@ -52,7 +52,7 @@ struct MyPredicate {
   std::string operand1;
   std::string sign;
   std::string operand2;
-  std::unordered_map<std::string, MyVariable> vars;
+  std::map<std::string, MyVariable> vars;
   std::string changed_var;
 
   MyPredicate(std::string name_, std::string value_) {
@@ -71,7 +71,7 @@ struct MyPredicate {
   }
 
   MyPredicate(std::string name_,
-                std::unordered_map<std::string, MyVariable> vars_) {
+                std::map<std::string, MyVariable> vars_) {
     name = name_;
     vars = vars_;
     type = HEAD;
@@ -85,7 +85,8 @@ struct MyPredicate {
   MyPredicate() {
   }
 
-  std::string Print() { 
+  std::string Print() {
+    std::string res;
     switch (type) { 
       case BINARY:
         return name + " = " + operand1 + " " + sign + " " + operand2;
@@ -93,7 +94,7 @@ struct MyPredicate {
         return name + " = " + operand1;
       case HEAD:
       case FUNCTION:
-        std::string res = name;
+        res = name;
         if (vars.size() > 0) {
           res += "( ";
           auto first = 1;
@@ -109,6 +110,8 @@ struct MyPredicate {
           res += " )";
         }
         return res;
+      default:
+        return "Unknown type";
     }
   }
 

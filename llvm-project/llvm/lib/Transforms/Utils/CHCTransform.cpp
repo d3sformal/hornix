@@ -129,7 +129,7 @@ load_basic_block_info(Function &F) {
               return_value =
                   MyVariable(convert_name_to_string(o), get_type(o->getType()));
             } else {
-              return_value = MyVariable(o->getNameOrAsOperand());
+              return_value = MyVariable(convert_name_to_string(o));
             }
           }
           BB->isLastBlock = true;
@@ -188,11 +188,12 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 #pragma region Transform basic blocks
 // Convert Value name to std::string
 std::string convert_name_to_string(Value *BB) {
-  /*std::string block_address;
+  std::string block_address;
   raw_string_ostream string_stream(block_address);
-  */return BB->getNameOrAsOperand();
+  /*return BB->getNameOrAsOperand();*/
+  BB->printAsOperand(string_stream, false);
 
-  //return string_stream.str();
+  return string_stream.str();
 }
 
 // Get type of variable
@@ -295,7 +296,7 @@ MyPredicate tranform_function_call(Instruction *I) {
       predicate.vars.insert(
           std::make_pair(var_name, MyVariable(var_name, var_type)));
     } else {
-      var_name = arg->get()->getNameOrAsOperand();
+      var_name = convert_name_to_string(arg->get());
 
       predicate.vars.insert(
           std::make_pair(var_name, MyVariable(var_name)));
@@ -371,7 +372,7 @@ MyPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
   }
 
   // Normal basic block header
-  std::unordered_map<std::string, MyVariable> vars;
+  std::map<std::string, MyVariable> vars;
   std::string var_name;
   std::string var_type;
   for (auto &v : BB->vars) {
@@ -714,7 +715,7 @@ void smt_print_predicates(std::vector<MyPredicate> predicates) {
 
 // Print all variables from implication. All variables are in head predicates.
 int smt_quantifiers(Implication *imp, int indent) {
-  std::unordered_map<std::string, std::string> vars;
+  std::map<std::string, std::string> vars;
   
   // Variables from head of implication 
   for (auto v : imp->head.vars) {
@@ -809,11 +810,11 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   //print_info(my_blocks);
     
-  print_implications(implications);
+  //print_implications(implications);
  
   //output << "SMT-LIB: " << std::endl;
 
-  //smt_print_implications(&implications);
+  smt_print_implications(&implications);
 
   return PreservedAnalyses::all();
 }

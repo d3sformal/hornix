@@ -1,49 +1,13 @@
 (set-logic HORN)
 (set-info :status sat)
-(declare-fun |?inc@@YAHH@Z0_entry| ( Int) Bool )
-(declare-fun |?inc@@YAHH@Z1_entry| ( Int Int) Bool )
-(declare-fun |?inc@@YAHH@Z1_exit| ( Int Int) Bool )
-(declare-fun |?inc@@YAHH@Z| ( Int Int) Bool )
-
-(assert 
- (forall ( ( %x1 Int ) )
-  (=>  
-   true
-   (?inc@@YAHH@Z0_entry %x1 )
-  )
- )
-)
-(assert 
- (forall ( ( %x0 Int )( %x1 Int ) )
-  (=>  
-   (?inc@@YAHH@Z0_entry %x1 )
-   (?inc@@YAHH@Z1_entry %x0 %x1 )
-  )
- )
-)
-(assert 
- (forall ( ( %x0 Int )( %x0p Int )( %x1 Int ) )
-  (=>  
-   (and (?inc@@YAHH@Z1_entry %x0 %x1 )(= %x0p (+ %x1 1 )))
-   (?inc@@YAHH@Z1_exit %x0p %x1 )
-  )
- )
-)
-(assert 
- (forall ( ( %x1 Int )( %x0 Int ) )
-  (=>  
-   (?inc@@YAHH@Z1_exit %x0 %x1 )
-   (?inc@@YAHH@Z %x1 %x0 )
-  )
- )
-)
-
 (declare-fun |main0_entry| () Bool )
-(declare-fun |main1_entry| ( Int Bool) Bool )
-(declare-fun |main1_exit| ( Int Bool) Bool )
-(declare-fun |main3_entry| ( Int Bool Bool) Bool )
+(declare-fun |main1_entry| ( Int Int Int Bool) Bool )
+(declare-fun |main1_exit| ( Int Int Int Bool) Bool )
+(declare-fun |main3_entry| ( Int Int Bool Bool Int Bool) Bool )
 (declare-fun |main_error| () Bool )
-(declare-fun |main3_exit| ( Int Bool Bool) Bool )
+(declare-fun |main3_exit| ( Int Int Bool Bool Int Bool) Bool )
+(declare-fun |main5_entry| ( Int Int Bool Bool Int Bool Bool) Bool )
+(declare-fun |main5_exit| ( Int Int Bool Bool Int Bool Bool) Bool )
 (declare-fun |main| ( Int) Bool )
 
 (assert 
@@ -53,49 +17,73 @@
  )
 )
 (assert 
- (forall ( ( %x3 Int )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x2 Int )( %x4 Int )( %x6 Bool ) )
   (=>  
    main0_entry
-   (main1_entry %x3 %x5 )
+   (main1_entry %x0 %x2 %x4 %x6 )
   )
  )
 )
 (assert 
- (forall ( ( %x3p Int )( %x5p Bool )( %x3 Int )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x0p Int )( %x2 Int )( %x2p Int )( %x4 Int )( %x4p Int )( %x6 Bool )( %x6p Bool ) )
   (=>  
-   (and (main1_entry %x3 %x5 )(?inc@@YAHH@Z 0 %x3p )(= %x5p ( =  %x3p 1 )))
-   (main1_exit %x3p %x5p )
+   (and (main1_entry %x0 %x2 %x4 %x6 )(?inc@@YAHH@Z %x0p 0 )(= %x2p (+ %x0p 2 ))(= %x4p (+ %x2p 3 ))(= %x6p ( =  %x0p 1 )))
+   (main1_exit %x0p %x2p %x4p %x6p )
   )
  )
 )
 (assert 
- (forall ( ( %x3 Int )( %x13p Bool )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x2 Int )( %x20p Bool )( %x23 Bool )( %x4 Int )( %x6 Bool ) )
   (=>  
-   (and (main1_exit %x3 %x5 )(= %x13p true )(= %x5 true ))
-   (main3_entry %x3 %x13p %x5 )
+   (and (main1_exit %x0 %x2 %x4 %x6 )(= %x20p true )(= %x6 true ))
+   (main3_entry %x0 %x2 %x20p %x23 %x4 %x6 )
   )
  )
 )
 (assert 
- (forall ( ( %x3 Int )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x2 Int )( %x4 Int )( %x6 Bool ) )
   (=>  
-   (and (main1_exit %x3 %x5 )(= %x5 false ))
+   (and (main1_exit %x0 %x2 %x4 %x6 )(= %x6 false ))
    main_error
   )
  )
 )
 (assert 
- (forall ( ( %x3 Int )( %x13 Bool )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x2 Int )( %x20 Bool )( %x23 Bool )( %x23p Bool )( %x4 Int )( %x6 Bool ) )
   (=>  
-   (main3_entry %x3 %x13 %x5 )
-   (main3_exit %x3 %x13 %x5 )
+   (and (main3_entry %x0 %x2 %x20 %x23 %x4 %x6 )(= %x23p ( =  %x4 7 )))
+   (main3_exit %x0 %x2 %x20 %x23p %x4 %x6 )
   )
  )
 )
 (assert 
- (forall ( ( %x3 Int )( %x13 Bool )( %x5 Bool ) )
+ (forall ( ( %x0 Int )( %x2 Int )( %x20 Bool )( %x23 Bool )( %x4 Int )( %x46p Bool )( %x6 Bool ) )
   (=>  
-   (main3_exit %x3 %x13 %x5 )
+   (and (main3_exit %x0 %x2 %x20 %x23 %x4 %x6 )(= %x46p true )(= %x23 true ))
+   (main5_entry %x0 %x2 %x20 %x23 %x4 %x46p %x6 )
+  )
+ )
+)
+(assert 
+ (forall ( ( %x0 Int )( %x2 Int )( %x20 Bool )( %x23 Bool )( %x4 Int )( %x6 Bool ) )
+  (=>  
+   (and (main3_exit %x0 %x2 %x20 %x23 %x4 %x6 )(= %x23 false ))
+   main_error
+  )
+ )
+)
+(assert 
+ (forall ( ( %x0 Int )( %x2 Int )( %x20 Bool )( %x23 Bool )( %x4 Int )( %x46 Bool )( %x6 Bool ) )
+  (=>  
+   (main5_entry %x0 %x2 %x20 %x23 %x4 %x46 %x6 )
+   (main5_exit %x0 %x2 %x20 %x23 %x4 %x46 %x6 )
+  )
+ )
+)
+(assert 
+ (forall ( ( %x0 Int )( %x2 Int )( %x20 Bool )( %x23 Bool )( %x4 Int )( %x46 Bool )( %x6 Bool ) )
+  (=>  
+   (main5_exit %x0 %x2 %x20 %x23 %x4 %x46 %x6 )
    (main 0 )
   )
  )
