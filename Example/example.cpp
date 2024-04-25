@@ -30,7 +30,7 @@ void fun()
 		y = y + 1;
 	}
 
-	assert(x < y);
+	assert(x > y);
 }
 
 //int add(int f)

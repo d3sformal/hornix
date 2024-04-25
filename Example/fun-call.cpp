@@ -1,3 +1,5 @@
+#include <assert.h>
+
 int inc(int x) {
 	return x + 1;
 }
@@ -8,5 +10,8 @@ int main() {
 	a = inc(a);
 	int b = a + 2;
 	b = b + 3;
+	assert(a == 1);
+
+	assert(b == 7);
 	return 0;
 }
