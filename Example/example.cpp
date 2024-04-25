@@ -20,18 +20,18 @@
 //}
 
 
-void fun() 
-{
-	int x = 1;
-	int y = 0;
-
-	while (y < 10) {
-		x = x + y;
-		y = y + 1;
-	}
-
-	assert(x > y);
-}
+//void fun() 
+//{
+//	int x = 1;
+//	int y = 0;
+//
+//	while (y < 10) {
+//		x = x + y;
+//		y = y + 1;
+//	}
+//
+//	assert(x > y);
+//}
 
 //int add(int f)
 //{
@@ -54,3 +54,26 @@ void fun()
 //    int k = max(i, j);
 //    return 0;
 //}
+
+int foo(int x,int y) {
+	auto res = x + y;
+	return res;
+}
+
+int bar(int x, int y) {		// 11, 1
+	auto res = x - y;	//10
+	assert(x >= 0 && y >= 0); //&& x < res));
+	return res;
+}
+
+int main() {
+	auto x = 10;
+	auto y = 1;
+	auto xold = x;	//10
+	auto yold = y;	//1
+	x = foo(x, y);	//11 = 10 + 1
+	y = bar(x, y);	//10 = 11 - 1
+	x = bar(x, y);	//1 = 11 - 10
+	assert(x == yold && y == xold);
+	return 0;
+}

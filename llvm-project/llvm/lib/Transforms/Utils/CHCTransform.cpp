@@ -31,8 +31,12 @@ void add_variable(Value *var, MyBasicBlock* my_block) {
     ++var_index;
   }
 
+  auto name = convert_name_to_string(var);
+
   // Add to basic block info
-  my_block->vars.insert(var);
+  //my_block->vars.insert(std::make_pair(name, var));
+
+   my_block->vars.insert(var);
 }
 
 // Find id of basic block by reference to llvm class
@@ -295,13 +299,11 @@ MyPredicate tranform_function_call(Instruction *I) {
       var_name = convert_name_to_string(arg->get());
       var_type = get_type(arg->get()->getType());
 
-      predicate.vars.insert(
-          std::make_pair(var_name, MyVariable(var_name, var_type)));
+      predicate.vars.push_back(MyVariable(var_name, var_type));
     } else {
       var_name = convert_name_to_string(arg->get());
 
-      predicate.vars.insert(
-          std::make_pair(var_name, MyVariable(var_name)));
+      predicate.vars.push_back(MyVariable(var_name));
     }
   }
 
@@ -309,8 +311,7 @@ MyPredicate tranform_function_call(Instruction *I) {
   if (!fn->getReturnType()->isVoidTy()) {
     var_name = convert_name_to_string(I);
 
-    predicate.vars.insert(std::make_pair(
-        var_name, MyVariable(var_name, get_type(fn->getReturnType()), true)));
+    predicate.vars.push_back(MyVariable(var_name, get_type(fn->getReturnType()), true));
     predicate.changed_var = var_name;
   }
   
@@ -358,8 +359,7 @@ MyPredicate get_function_predicate(Function *fn) {
       var_name = convert_name_to_string(arg);
       var_type = get_type(arg->getType());
 
-      predicate.vars.insert(
-          std::make_pair(var_name, MyVariable(var_name, var_type)));
+      predicate.vars.push_back(MyVariable(var_name, var_type));
     }
   }
 
@@ -375,7 +375,7 @@ MyPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
   }
 
   // Normal basic block header
-  std::map<std::string, MyVariable> vars;
+  std::vector<MyVariable> vars;
   std::string var_name;
   std::string var_type;
   for (auto &v : BB->vars) {
@@ -383,7 +383,7 @@ MyPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
       var_name = convert_name_to_string(v);
       var_type = get_type(v->getType());
       
-      vars.insert(std::make_pair(var_name, MyVariable(var_name, var_type)));
+      vars.push_back(MyVariable(var_name, var_type));
     }
   }
 
@@ -440,6 +440,7 @@ std::vector<MyPredicate> transform_phi_instructions(MyBasicBlock *predecessor,
   return result;
 }
 
+
 // Create implication from entry to exit point in basic block
 Implication create_entry_to_exit(MyBasicBlock *BB) {
   MyPredicate entry_predicate = get_head_predicate(BB, true);
@@ -452,40 +453,51 @@ Implication create_entry_to_exit(MyBasicBlock *BB) {
   std::unordered_set<std::string> prime_vars; 
 
   // Create prime variables in predicates
-  for (unsigned int i = 0; i < predicates.size(); i++) {
+  for (auto pred : predicates) { //unsigned int i = 0; i < predicates.size(); i++) {
     std::string var_changed;
     
-    if (predicates[i].type == FUNCTION) {
-      auto var_changed = predicates[i].changed_var;
+    if (pred.type == FUNCTION) {
+      auto var_changed = pred.changed_var;
       
-      exit_predicate.vars[var_changed].isPrime = true;
+      for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
+        if (exit_predicate.vars[i].name == var_changed) {
+            exit_predicate.vars[i].isPrime = true;
+            break;
+        }
+      }
       
       prime_vars.insert(var_changed); 
       
-      for (auto v : predicates[i].vars) {
-        if (prime_vars.find(v.first) != prime_vars.end()) {
-          v.second.isPrime = true;
+      for (unsigned int i = 0; i < pred.vars.size(); i++) {
+        if (prime_vars.find(pred.vars[i].name) != prime_vars.end()) {
+            pred.vars[i].isPrime = true;
         }
       }
     } 
     
-    else if (predicates[i].type == UNARY || predicates[i].type == BINARY) {
-      exit_predicate.vars[predicates[i].name].isPrime = true;
+    else if (pred.type == UNARY || pred.type == BINARY) {
       
-      if (prime_vars.find(predicates[i].operand1) != prime_vars.end()) {
-        predicates[i].operand1 = predicates[i].operand1 + PRIME_SIGN;
+      for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
+        if (exit_predicate.vars[i].name == pred.name) {
+          exit_predicate.vars[i].isPrime = true;
+          break;
+        }
       }
 
-      if (predicates[i].type == BINARY 
-          && prime_vars.find(predicates[i].operand2) != prime_vars.end()) {
-        predicates[i].operand1 = predicates[i].operand2 + PRIME_SIGN;
+      if (prime_vars.find(pred.operand1) != prime_vars.end()) {
+        pred.operand1 = pred.operand1 + PRIME_SIGN;
+      }
+
+      if (pred.type == BINARY 
+          && prime_vars.find(pred.operand2) != prime_vars.end()) {
+        pred.operand1 = pred.operand2 + PRIME_SIGN;
       }
       
-      prime_vars.insert(predicates[i].name);
-      predicates[i].name = predicates[i].name + PRIME_SIGN;
+      prime_vars.insert(pred.name);
+      pred.name = pred.name + PRIME_SIGN;
     } 
 
-    imp.predicates.push_back(predicates[i]);
+    imp.predicates.push_back(pred);
   }
   imp.head = exit_predicate;
   
@@ -530,10 +542,16 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
       auto phi_predicates = transform_phi_instructions(BB, successor);
       
       // Set prime variables
-      for (unsigned int i = 0; i < phi_predicates.size(); i++) {
-        succ_predicate.vars[phi_predicates[i].name].isPrime = true;
-        phi_predicates[i].name = phi_predicates[i].name + PRIME_SIGN;  
-        imp.predicates.push_back(phi_predicates[i]);
+      for (auto pred : phi_predicates) { // unsigned int i = 0; i < phi_predicates.size(); i++) {
+        
+        for (unsigned int i = 0; i < succ_predicate.vars.size(); i++) {
+          if (succ_predicate.vars[i].name == pred.name) {
+              succ_predicate.vars[i].isPrime = true;
+              break;
+          }
+        }        
+        pred.name = pred.name + PRIME_SIGN;  
+        imp.predicates.push_back(pred);
       }
 
       imp.head = succ_predicate;
@@ -552,7 +570,7 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
       auto imp = Implication(get_function_predicate(&F));
       
       if (!F.getReturnType()->isVoidTy()) {
-         imp.head.vars.insert(std::make_pair(BB->return_value.name, BB->return_value));
+         imp.head.vars.push_back(BB->return_value);
       }
 
       imp.predicates.push_back(current_exit_predicate);
@@ -586,7 +604,7 @@ void print_head_predicate(MyPredicate *p) {
       } else {
          first = 0;
       }
-      errs() << v.second.name ;
+      errs() << v.name ;
     }
     errs() << " )";
   }
@@ -633,10 +651,10 @@ void smt_declare_function(MyPredicate *predicate) {
   output << "(declare-fun |" << predicate->name << "| (";
 
   for (auto v : predicate->vars) {
-    if (v.second.isConstant) {
+    if (v.isConstant) {
       output << " " << "Int";
     } else {
-      output << " " << v.second.type;
+      output << " " << v.type;
     }
   }
 
@@ -667,7 +685,7 @@ void smt_print_head_predicate(MyPredicate* predicate) {
   
   output << predicate->name;
   for (auto v : predicate->vars) {
-    auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
+    auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
     output << " " << name;
   }
   if (var_size > 0) {
@@ -702,6 +720,8 @@ void smt_print_predicate(MyPredicate *predicate) {
     case FUNCTION:
       smt_print_head_predicate(predicate);
       return;
+    case UNKNOWN:
+      return;
   }
 }
 
@@ -728,18 +748,18 @@ int smt_quantifiers(Implication *imp, int indent) {
   
   // Variables from head of implication 
   for (auto v : imp->head.vars) {
-    if (!v.second.isConstant) {
-      auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
-      vars.insert(std::make_pair(name, v.second.type));
+    if (!v.isConstant) {
+      auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+      vars.insert(std::make_pair(name, v.type));
     }
   }
   
   // Variables from head predicates from predicates
   for (auto h : imp->predicates) {
     for (auto v : h.vars) {
-      if (!v.second.isConstant) {
-        auto name = v.second.isPrime ? v.first + PRIME_SIGN : v.first;
-        vars.insert(std::make_pair(name, v.second.type));
+      if (!v.isConstant) {
+        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+        vars.insert(std::make_pair(name, v.type));
       }
     }
   }

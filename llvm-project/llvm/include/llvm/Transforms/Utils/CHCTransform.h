@@ -56,7 +56,7 @@ struct MyPredicate {
   std::string operand1;
   std::string sign;
   std::string operand2;
-  std::map<std::string, MyVariable> vars;
+  std::vector<MyVariable> vars;
   std::string changed_var;
 
   MyPredicate(std::string name_, std::string value_) {
@@ -75,7 +75,7 @@ struct MyPredicate {
   }
 
   MyPredicate(std::string name_,
-                std::map<std::string, MyVariable> vars_) {
+                std::vector<MyVariable> vars_) {
     name = name_;
     vars = vars_;
     type = HEAD;
@@ -111,7 +111,7 @@ struct MyPredicate {
               first = 0;
             }
             res +=
-                v.second.isPrime ? v.second.name + PRIME_SIGN : v.second.name;
+                v.isPrime ? v.name + PRIME_SIGN : v.name;
           }
           res += " )";
         }
