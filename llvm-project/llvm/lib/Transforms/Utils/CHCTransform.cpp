@@ -42,7 +42,7 @@ std::uint8_t get_block_id_by_link(
     }
   }
 
-  throw std::exception("Unkown basic block.");
+  throw std::logic_error("Unkown basic block.");
 }
 
 // See if call instruction calls _wassert function
@@ -218,7 +218,7 @@ std::string cmp_sign(Instruction *I) {
     break;
   default:
     sign = " ? ";
-    //throw std::bad_exception("Unknown symbol");
+    throw std::logic_error("Unknown symbol");
     break;
   }
   return sign;
@@ -228,7 +228,7 @@ std::string cmp_sign(Instruction *I) {
 UnaryPredicate transform_br(Instruction *I, BasicBlock * successor) { 
   // Instruction must have 3 operands to jump
   if (I->getNumOperands() != 3) {
-    throw new std::bad_exception(
+    throw new std::logic_error(
         "Wrong instruction. Too few function operands");
   }
   
@@ -251,7 +251,7 @@ BinaryPredicate transform_binary_inst(Instruction *I) {
     sign = "-";
     break;
   default:
-    throw new std::exception("Wrong binary instruction.");
+    throw new std::logic_error("Wrong binary instruction.");
   }
 
   return BinaryPredicate(convert_name_to_string(I),
@@ -278,7 +278,7 @@ Predicates transform_instructions(MyBasicBlock *BB) {
       result.binary.push_back(transform_binary_inst(&I));
       break;
     default:
-      //throw std::bad_exception("Not implemented instruction");
+      //throw std::logic_error("Not implemented instruction");
       break;
     }    
   }
