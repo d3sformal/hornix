@@ -116,6 +116,7 @@ struct MyPredicate {
           res += " )";
         }
         return res;
+      case UNKNOWN:
       default:
         throw new std::logic_error("Unknown predicate type to print.");
     }

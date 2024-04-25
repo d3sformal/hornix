@@ -187,13 +187,13 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 #pragma region Transform basic blocks
 // Convert Value name to std::string
 std::string convert_name_to_string(Value *BB) {
-  /*std::string block_address;
+  std::string block_address;
   raw_string_ostream string_stream(block_address);
   
   BB->printAsOperand(string_stream, false);
 
-  return string_stream.str();*/
-  return BB->getNameOrAsOperand();
+  return string_stream.str();
+  //return BB->getNameOrAsOperand();
 }
 
 // Get type of variable
