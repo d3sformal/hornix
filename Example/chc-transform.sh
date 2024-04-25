@@ -26,7 +26,7 @@ echo "(set-info :status sat)" >> $file_name.smt2
 
 clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o $file_name.ll
 opt -passes=mem2reg -S $file_name.ll -o $file_name.ll
-opt -disable-output $file_name.ll -passes=chc-transform > $file_name.smt2
+opt -disable-output $file_name.ll -passes=chc-transform >> $file_name.smt2
 
 echo "(check-sat)" >> $file_name.smt2
 
