@@ -7,13 +7,14 @@
 
 namespace llvm {
 
-  const auto PRIME_SIGN = 'p';
+const auto PRIME_SIGN = 'p';
 
 enum MyPredicateType {
   HEAD,
   BINARY,
   UNARY,
-  FUNCTION
+  FUNCTION,
+  UNKNOWN
 };
 
 struct MyVariable {
@@ -43,7 +44,10 @@ struct MyVariable {
     isConstant = true;
   }
 
-  MyVariable() {}
+  MyVariable() {
+    isConstant = false;
+    isPrime = false;
+  }
 };
 
 struct MyPredicate {
@@ -82,9 +86,11 @@ struct MyPredicate {
     type = HEAD;
   }
 
-  MyPredicate() {
+  MyPredicate() { 
+    type = UNKNOWN;
   }
 
+  // Print predicate in implication as text
   std::string Print() {
     std::string res;
     switch (type) { 
@@ -111,73 +117,13 @@ struct MyPredicate {
         }
         return res;
       default:
-        return "Unknown type";
+        throw new std::logic_error("Unknown predicate type to print.");
     }
   }
 
 };
 
-
-
-//struct UnaryPredicate {
-//  std::string name;
-//  std::string value;
-//  
-//  UnaryPredicate(std::string name_, std::string value_) { 
-//    name = name_;
-//    value = value_;
-//  }
-//
-//  std::string Print() {
-//    return name + " = " + value;
-//  }
-//};
-//
-//struct BinaryPredicate {
-//  std::string name;
-//  std::string operand1;
-//  std::string sign;
-//  std::string operand2;
-//
-//  BinaryPredicate(std::string name_, std::string op1, std::string sign_,
-//                 std::string op2) {
-//    name = name_;
-//    operand1 = op1;
-//    sign = sign_;
-//    operand2 = op2;
-//  }
-//
-//  std::string Print() {
-//    return name + " = " + operand1 + " " + sign + " " + operand2;
-//  }
-//};
-//
-//struct HeadPredicate {
-//  std::string name;
-//  std::unordered_map<std::string, MyVariable> vars;
-//  
-//  HeadPredicate(std::string name_, std::unordered_map<std::string, MyVariable> vars_) {
-//    name = name_;
-//    vars = vars_;
-//  }
-//
-//  HeadPredicate(std::string name_) { 
-//    name = name_;
-//  }
-//
-//  HeadPredicate() {}
-//};
-//
-//struct Predicates {
-//  std::vector<UnaryPredicate> unary;
-//  std::vector<BinaryPredicate> binary;
-//  std::vector<HeadPredicate> head;
-//};
-
 struct Implication {
-  //Predicates predicates;
-  //HeadPredicate head;
-
   std::vector<MyPredicate> predicates;
   MyPredicate head;
 
@@ -203,7 +149,10 @@ struct MyBasicBlock {
   llvm::Instruction * last_instruction;
   // True if block calls wassert function and fails
   bool isFalseBlock;
+  // True if it contains return instruction
   bool isLastBlock;
+  // Return variable from function
+  MyVariable return_value;
 
   MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
     BB_link = BB_link_;
@@ -214,7 +163,13 @@ struct MyBasicBlock {
     isLastBlock = false;
   }
 
-  MyBasicBlock() {}
+  MyBasicBlock() { 
+    BB_link = NULL;
+    id = 0;
+    isFalseBlock = false;
+    isLastBlock = false;
+    last_instruction = NULL;
+  }
 };
 
 

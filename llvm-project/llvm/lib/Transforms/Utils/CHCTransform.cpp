@@ -12,7 +12,6 @@ using namespace llvm;
 int var_index = 0;
 auto &output = std::cout;
 std::string function_name;
-MyVariable return_value;
 
 std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
@@ -126,10 +125,10 @@ load_basic_block_info(Function &F) {
           if (!F.getReturnType()->isVoidTy()) {
             auto o = I.getOperand(0);
             if (o->getValueID() != Value::ConstantIntVal) {
-              return_value =
+              BB->return_value =
                   MyVariable(convert_name_to_string(o), get_type(o->getType()));
             } else {
-              return_value = MyVariable(convert_name_to_string(o));
+              BB->return_value = MyVariable(convert_name_to_string(o));
             }
           }
           BB->isLastBlock = true;
@@ -188,12 +187,13 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 #pragma region Transform basic blocks
 // Convert Value name to std::string
 std::string convert_name_to_string(Value *BB) {
-  std::string block_address;
+  /*std::string block_address;
   raw_string_ostream string_stream(block_address);
-  /*return BB->getNameOrAsOperand();*/
+  
   BB->printAsOperand(string_stream, false);
 
-  return string_stream.str();
+  return string_stream.str();*/
+  return BB->getNameOrAsOperand();
 }
 
 // Get type of variable
@@ -279,6 +279,7 @@ MyPredicate transform_binary_inst(Instruction *I) {
                          convert_name_to_string(I->getOperand(1)));
 }
 
+// Create function predicate for function call
 MyPredicate tranform_function_call(Instruction *I) {
   CallInst *call_inst = dyn_cast<CallInst>(I); 
   Function *fn = call_inst->getCalledFunction();
@@ -288,6 +289,7 @@ MyPredicate tranform_function_call(Instruction *I) {
   std::string var_name;
   std::string var_type;
   
+  // Add parameters
   for (auto arg = call_inst->arg_begin(); arg != call_inst->arg_end(); ++arg) {
     if (arg->get()->getValueID() != Value::ConstantIntVal) {
       var_name = convert_name_to_string(arg->get());
@@ -303,6 +305,7 @@ MyPredicate tranform_function_call(Instruction *I) {
     }
   }
 
+  // Add return variable
   if (!fn->getReturnType()->isVoidTy()) {
     var_name = convert_name_to_string(I);
 
@@ -343,7 +346,7 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB) {
   return result;
 }
 
-
+// Create function predicate for current function
 MyPredicate get_function_predicate(Function *fn) {
 
   auto predicate = MyPredicate(fn->getName().str());
@@ -448,36 +451,40 @@ Implication create_entry_to_exit(MyBasicBlock *BB) {
   
   std::unordered_set<std::string> prime_vars; 
 
-  // Find changed variables
+  // Create prime variables in predicates
   for (unsigned int i = 0; i < predicates.size(); i++) {
     std::string var_changed;
+    
     if (predicates[i].type == FUNCTION) {
       auto var_changed = predicates[i].changed_var;
+      
       exit_predicate.vars[var_changed].isPrime = true;
+      
       prime_vars.insert(var_changed); 
+      
       for (auto v : predicates[i].vars) {
         if (prime_vars.find(v.first) != prime_vars.end()) {
           v.second.isPrime = true;
         }
       }
-    } else if (predicates[i].type == UNARY) {
+    } 
+    
+    else if (predicates[i].type == UNARY || predicates[i].type == BINARY) {
       exit_predicate.vars[predicates[i].name].isPrime = true;
+      
       if (prime_vars.find(predicates[i].operand1) != prime_vars.end()) {
         predicates[i].operand1 = predicates[i].operand1 + PRIME_SIGN;
       }
-      prime_vars.insert(predicates[i].name);
-      predicates[i].name = predicates[i].name + PRIME_SIGN;
-    } else if (predicates[i].type == BINARY) {
-      exit_predicate.vars[predicates[i].name].isPrime = true;
-      if (prime_vars.find(predicates[i].operand1) != prime_vars.end()) {
-        predicates[i].operand1 = predicates[i].operand1 + PRIME_SIGN;
-      }
-      if (prime_vars.find(predicates[i].operand2) != prime_vars.end()) {
+
+      if (predicates[i].type == BINARY 
+          && prime_vars.find(predicates[i].operand2) != prime_vars.end()) {
         predicates[i].operand1 = predicates[i].operand2 + PRIME_SIGN;
       }
+      
       prime_vars.insert(predicates[i].name);
       predicates[i].name = predicates[i].name + PRIME_SIGN;
     } 
+
     imp.predicates.push_back(predicates[i]);
   }
   imp.head = exit_predicate;
@@ -497,7 +504,7 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
   for (auto &it : my_blocks) {
     MyBasicBlock * BB = &it.second;
     
-    // Skip failed assert basic blocks
+    // Skip failed assert basic blocks and remember to add false block
     if (BB->isFalseBlock) {
       failed_block = true;
       continue;
@@ -521,7 +528,8 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
       // Translate phi instructions
       auto phi_predicates = transform_phi_instructions(BB, successor);
-      // Find changed variables
+      
+      // Set prime variables
       for (unsigned int i = 0; i < phi_predicates.size(); i++) {
         succ_predicate.vars[phi_predicates[i].name].isPrime = true;
         phi_predicates[i].name = phi_predicates[i].name + PRIME_SIGN;  
@@ -539,11 +547,12 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
       result.push_back(imp); 
     }
 
+    // From return instruction to function predicate implication
     if (BB->isLastBlock) {
       auto imp = Implication(get_function_predicate(&F));
       
       if (!F.getReturnType()->isVoidTy()) {
-         imp.head.vars.insert(std::make_pair(return_value.name, return_value));
+         imp.head.vars.insert(std::make_pair(BB->return_value.name, BB->return_value));
       }
 
       imp.predicates.push_back(current_exit_predicate);
@@ -680,7 +689,7 @@ void smt_print_binary_predicate(MyPredicate *predicate) {
     << " ))";
 }
 
-
+// Call print for predicate 
 void smt_print_predicate(MyPredicate *predicate) {
   switch (predicate->type) { 
     case BINARY:
