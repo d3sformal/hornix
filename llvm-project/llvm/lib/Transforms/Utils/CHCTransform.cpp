@@ -59,7 +59,7 @@ bool isFailedAssertCall(Instruction *I) {
   if (I->getOpcode() == Instruction::Call) {
     if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
       Function *fn = call_inst->getCalledFunction();
-      return fn->getName() == StringRef("_wassert");
+      return ASSERT_FUNCTIONS.find(fn->getName().str()) != ASSERT_FUNCTIONS.end();
     }
   }
 
@@ -439,7 +439,6 @@ std::vector<MyPredicate> transform_phi_instructions(MyBasicBlock *predecessor,
   }
   return result;
 }
-
 
 // Create implication from entry to exit point in basic block
 Implication create_entry_to_exit(MyBasicBlock *BB) {
@@ -840,8 +839,6 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   //print_info(my_blocks);
     
   //print_implications(implications);
- 
-  //output << "SMT-LIB: " << std::endl;
 
   smt_print_implications(&implications);
 

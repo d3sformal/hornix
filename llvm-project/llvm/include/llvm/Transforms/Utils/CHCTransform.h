@@ -9,6 +9,16 @@ namespace llvm {
 
 const auto PRIME_SIGN = 'p';
 
+const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
+  "__assert",
+  "__assert2",
+  "__assert_fail",
+  "__assert_perror_fail",
+  "__assert_rtn",
+  "_assert",
+  "_wassert"
+};
+
 enum MyPredicateType {
   HEAD,
   BINARY,
