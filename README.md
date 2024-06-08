@@ -4,9 +4,9 @@
 
 ## **Getting started**
 
-#### Download LLVM 
+#### Download LLVM
 
-1. Clone LLVM repository: 
+1. Clone LLVM repository:
 
     `git clone https://github.com/llvm/llvm-project.git`
 
@@ -22,15 +22,19 @@
 
 
 
- #### Configure LLVM using CMake 
+ #### Configure LLVM using CMake
 
 1. ```
-   cmake -S llvm\llvm -B build -DLLVM_ENABLE_PROJECTS=clang -DLLVM_TARGETS_TO_BUILD=X86 -Thost=x64
+   cmake -S llvm-project\llvm -B build -DLLVM_ENABLE_PROJECTS=clang -DLLVM_TARGETS_TO_BUILD=X86 -Thost=x64 -DLLVM_ENABLE_EH=true -DLLVM_ENABLE_RTTI=true
+2.
+    cmake --build build --target clang
+3.
+    cmake --build build --target opt
    ```
 
 
 
-### Official documentation for LLVM start 
+### Official documentation for LLVM start
 
 https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm
 
@@ -39,7 +43,7 @@ https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-l
 ## **Using pass**
 
 1. Compile using clang with minimal number of passes: ` clang++ -Xclang -disable-O0-optnone -S -emit-llvm {source code} -o {output file}`
-2. Use passes. First, pass to move memory allocation to registers (mem2reg) and then my pass(chc-transform): `opt -S {input file} -passes=mem2reg,chc-transform -o {output file}` 
+2. Use passes. First, pass to move memory allocation to registers (mem2reg) and then my pass(chc-transform): `opt -S {input file} -passes=mem2reg,chc-transform -o {output file}`
 
 
 
@@ -56,7 +60,7 @@ opt -disable-output -S example.ll -passes=mem2reg,chc-transform > example.ll
 
 ## **Running verification using bash script**
 
-You can run program using bash script *chc-transform.sh*. It takes one argument, which is expected to be cpp or c source file. 
+You can run program using bash script *chc-transform.sh*. It takes one argument, which is expected to be cpp or c source file.
 
 For example: `./chc-transform.sh example.cpp`
 
