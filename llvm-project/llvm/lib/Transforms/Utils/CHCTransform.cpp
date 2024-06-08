@@ -17,9 +17,9 @@ std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
 
 #pragma region Create my basic blocks
-// Set name for variable and add to basic block info if not presented 
+// Set name for variable and add to basic block info if not presented
 void add_variable(Value *var, MyBasicBlock* my_block) {
-  
+
   // Skip labels and pointers
   if (var->getType()->isLabelTy() || var->getType()->isPointerTy()) {
     return;
@@ -36,13 +36,13 @@ void add_variable(Value *var, MyBasicBlock* my_block) {
   // Add to basic block info
   //my_block->vars.insert(std::make_pair(name, var));
 
-   my_block->vars.insert(var);
+  my_block->vars.insert(var);
 }
 
 // Find id of basic block by reference to llvm class
-std::uint8_t get_block_id_by_link(
+std::int8_t get_block_id_by_link(
     BasicBlock *block,
-    std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
+    std::map<std::uint8_t, MyBasicBlock> my_blocks) {
 
   for (auto &bb : my_blocks) {
     if (bb.second.BB_link == block) {
@@ -50,7 +50,7 @@ std::uint8_t get_block_id_by_link(
     }
   }
 
-  throw std::logic_error("Unkown basic block.");
+  return -1;
 }
 
 // See if call instruction calls _wassert function
@@ -67,24 +67,27 @@ bool isFailedAssertCall(Instruction *I) {
 }
 
 // Name basic blocks and create own structs for basic blocks
-std::unordered_map<std::uint8_t, MyBasicBlock>
+std::map<std::uint8_t, MyBasicBlock>
 load_basic_block_info(Function &F) {
-  std::unordered_map<std::uint8_t, MyBasicBlock> myBasicBlocks;
+  std::map<std::uint8_t, MyBasicBlock> myBasicBlocks;
 
   int bb_index = 1;
   function_name = F.getName().str();
+  bool first = true;
 
   // Name all basic blocks and create MyBasicBlock for each
   for (BasicBlock &BB : F) {
-    if (!BB.hasName()) {
+    if (!BB.hasName() && (first || BB.hasNPredecessorsOrMore(1))) {
+
       auto name = function_name + std::to_string(bb_index);
       BB.setName(name);
-      
+
       MyBasicBlock myBB(&BB, name, bb_index);
       myBasicBlocks.insert(std::make_pair(bb_index, myBB));
 
       ++bb_index;
     }
+    first = false;
   }
 
   // Set MyBasicBlock info
@@ -94,15 +97,19 @@ load_basic_block_info(Function &F) {
 
     // Set Predecessors of blocks and variables from them
     for (auto pred : predecessors(block_link)) {
+
       // Find predecessor id
       auto pred_id = get_block_id_by_link(pred, myBasicBlocks);
-      
-      // Add predecessor
-      BB->predecessors.push_back(pred_id);
-      
-      // Add new variables from predecessor
-      for (auto v : myBasicBlocks[pred_id].vars) {
-          add_variable(v, BB);
+
+      if (pred_id != -1) {
+
+        // Add predecessor
+        BB->predecessors.push_back(pred_id);
+
+        // Add new variables from predecessor
+        for (auto v : myBasicBlocks[pred_id].vars) {
+            add_variable(v, BB);
+        }
       }
     }
 
@@ -113,7 +120,7 @@ load_basic_block_info(Function &F) {
 
     // Find all used variables in instructions
     for (Instruction &I : block_link->instructionsWithoutDebug()) {
-      
+
       // See if basic block handles failed assertion
       if (isFailedAssertCall(&I)) {
           BB->isFalseBlock = true;
@@ -138,7 +145,7 @@ load_basic_block_info(Function &F) {
           BB->isLastBlock = true;
       }
 
-      // Add instructions returning void 
+      // Add instructions returning void
       if (!I.getType()->isVoidTy()) {
         add_variable(&I, BB);
       }
@@ -155,8 +162,8 @@ load_basic_block_info(Function &F) {
 #pragma endregion
 
 #pragma region Print my basic blocks
-void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
-  
+void print_info(std::map<std::uint8_t, MyBasicBlock> my_blocks) {
+
   for (auto &it : my_blocks) {
     MyBasicBlock &BB = it.second;
     errs() << "BB: " << BB.name << " : " << BB.BB_link << "\n";
@@ -193,7 +200,7 @@ void print_info(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks) {
 std::string convert_name_to_string(Value *BB) {
   std::string block_address;
   raw_string_ostream string_stream(block_address);
-  
+
   BB->printAsOperand(string_stream, false);
 
   return string_stream.str();
@@ -201,7 +208,7 @@ std::string convert_name_to_string(Value *BB) {
 }
 
 // Get type of variable
-std::string get_type(Type *type) { 
+std::string get_type(Type *type) {
   if (type->isIntegerTy()) {
     auto w = cast<IntegerType>(type)->getBitWidth();
     if (w == 1) {
@@ -214,7 +221,7 @@ std::string get_type(Type *type) {
 }
 
 // Transform Cmp instruction
-std::string cmp_sign(Instruction *I) { 
+std::string cmp_sign(Instruction *I) {
   std::string sign;
   CmpInst *CmpI = (CmpInst *)I;
   switch (CmpI->getPredicate()) {
@@ -249,15 +256,15 @@ std::string cmp_sign(Instruction *I) {
 }
 
 // Create predicate for br instruction
-MyPredicate transform_br(Instruction *I, BasicBlock * successor) { 
+MyPredicate transform_br(Instruction *I, BasicBlock * successor) {
   // Instruction must have 3 operands to jump
   if (I->getNumOperands() != 3) {
     throw new std::logic_error(
         "Wrong instruction. Too few function operands");
   }
-  
+
   std::string res = successor == I->getOperand(2) ? "true" : "false";
-  
+
   return MyPredicate(convert_name_to_string(I->getOperand(0)), res);
 }
 
@@ -285,14 +292,14 @@ MyPredicate transform_binary_inst(Instruction *I) {
 
 // Create function predicate for function call
 MyPredicate tranform_function_call(Instruction *I) {
-  CallInst *call_inst = dyn_cast<CallInst>(I); 
+  CallInst *call_inst = dyn_cast<CallInst>(I);
   Function *fn = call_inst->getCalledFunction();
   auto predicate = MyPredicate(fn->getName().str());
-  
+
   predicate.type = FUNCTION;
   std::string var_name;
   std::string var_type;
-  
+
   // Add parameters
   for (auto arg = call_inst->arg_begin(); arg != call_inst->arg_end(); ++arg) {
     if (arg->get()->getValueID() != Value::ConstantIntVal) {
@@ -314,22 +321,22 @@ MyPredicate tranform_function_call(Instruction *I) {
     predicate.vars.push_back(MyVariable(var_name, get_type(fn->getReturnType()), true));
     predicate.changed_var = var_name;
   }
-  
+
   return predicate;
 }
 
 // Transform instructions to predicates from instructions in basic block
 std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB) {
-  
+
   std::vector<MyPredicate> result;
-  
+
   for (Instruction &I: BB->BB_link->instructionsWithoutDebug()) {
-        
-    switch (I.getOpcode()) { 
+
+    switch (I.getOpcode()) {
     // Instructions with no predicate
     case Instruction::Br:
     case Instruction::PHI:
-      break; 
+      break;
     // Instructions with 1 predicate
     case Instruction::ICmp:
     case Instruction::Add:
@@ -342,7 +349,7 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB) {
     default:
       //throw std::logic_error("Not implemented instruction");
       break;
-    }    
+    }
   }
   return result;
 }
@@ -382,20 +389,20 @@ MyPredicate get_head_predicate(MyBasicBlock * BB, bool isEntry) {
     if (v->getValueID() != Value::ConstantIntVal) {
       var_name = convert_name_to_string(v);
       var_type = get_type(v->getType());
-      
+
       vars.push_back(MyVariable(var_name, var_type));
     }
   }
 
   std::string suffix = isEntry ? "_entry" : "_exit" ;
-    
+
   return MyPredicate(BB->name + suffix, vars);
 
 }
 
-// Create first implication for function input and transfer to BB1 
+// Create first implication for function input and transfer to BB1
 std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock * BB1) {
-  
+
   std::vector<Implication> result;
 
   // Create basic block for entry
@@ -408,13 +415,13 @@ std::vector<Implication> get_entry_block_implications(Function &F, MyBasicBlock 
   MyPredicate predicate = get_head_predicate(&BB_entry, true);
 
   // Create first implication (true -> BBentry(x1,..))
-  Implication imp(predicate);  
+  Implication imp(predicate);
   imp.predicates.push_back(
       MyPredicate("true"));
 
   result.push_back(imp);
-  
-  // Create transfer to BB1 
+
+  // Create transfer to BB1
   Implication imp1(get_head_predicate(BB1, true));
   imp1.predicates.push_back(predicate);
   result.push_back(imp1);
@@ -435,7 +442,7 @@ std::vector<MyPredicate> transform_phi_instructions(MyBasicBlock *predecessor,
 
       result.push_back(MyPredicate(convert_name_to_string(&I),
                        convert_name_to_string(translation)));
-    }    
+    }
   }
   return result;
 }
@@ -444,38 +451,38 @@ std::vector<MyPredicate> transform_phi_instructions(MyBasicBlock *predecessor,
 Implication create_entry_to_exit(MyBasicBlock *BB) {
   MyPredicate entry_predicate = get_head_predicate(BB, true);
   MyPredicate exit_predicate = get_head_predicate(BB, false);
-  
+
   auto predicates = transform_instructions(BB);
   Implication imp(exit_predicate);
   imp.predicates.push_back(entry_predicate);
-  
-  std::unordered_set<std::string> prime_vars; 
+
+  std::unordered_set<std::string> prime_vars;
 
   // Create prime variables in predicates
   for (auto pred : predicates) { //unsigned int i = 0; i < predicates.size(); i++) {
     std::string var_changed;
-    
+
     if (pred.type == FUNCTION) {
       auto var_changed = pred.changed_var;
-      
+
       for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
         if (exit_predicate.vars[i].name == var_changed) {
             exit_predicate.vars[i].isPrime = true;
             break;
         }
       }
-      
-      prime_vars.insert(var_changed); 
-      
+
+      prime_vars.insert(var_changed);
+
       for (unsigned int i = 0; i < pred.vars.size(); i++) {
         if (prime_vars.find(pred.vars[i].name) != prime_vars.end()) {
             pred.vars[i].isPrime = true;
         }
       }
-    } 
-    
+    }
+
     else if (pred.type == UNARY || pred.type == BINARY) {
-      
+
       for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
         if (exit_predicate.vars[i].name == pred.name) {
           exit_predicate.vars[i].isPrime = true;
@@ -487,34 +494,34 @@ Implication create_entry_to_exit(MyBasicBlock *BB) {
         pred.operand1 = pred.operand1 + PRIME_SIGN;
       }
 
-      if (pred.type == BINARY 
+      if (pred.type == BINARY
           && prime_vars.find(pred.operand2) != prime_vars.end()) {
         pred.operand1 = pred.operand2 + PRIME_SIGN;
       }
-      
+
       prime_vars.insert(pred.name);
       pred.name = pred.name + PRIME_SIGN;
-    } 
+    }
 
     imp.predicates.push_back(pred);
   }
   imp.head = exit_predicate;
-  
+
   return imp;
 }
 
 // Transform basic blocks to implications
 std::vector<Implication>
-transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
+transform_basic_blocks(std::map<std::uint8_t, MyBasicBlock> my_blocks,
             Function &F) {
-  
+
   auto failed_block = false;
   std::vector<Implication> result;
   result = get_entry_block_implications(F, &my_blocks[1]);
 
   for (auto &it : my_blocks) {
     MyBasicBlock * BB = &it.second;
-    
+
     // Skip failed assert basic blocks and remember to add false block
     if (BB->isFalseBlock) {
       failed_block = true;
@@ -523,7 +530,7 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
     // Create implication of current basic block (entry -> exit)
     result.push_back(create_entry_to_exit(BB));
-    
+
     MyPredicate current_exit_predicate = get_head_predicate(BB, false);
 
     // Create implications for transfers to successors
@@ -539,17 +546,17 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
       // Translate phi instructions
       auto phi_predicates = transform_phi_instructions(BB, successor);
-      
+
       // Set prime variables
       for (auto pred : phi_predicates) { // unsigned int i = 0; i < phi_predicates.size(); i++) {
-        
+
         for (unsigned int i = 0; i < succ_predicate.vars.size(); i++) {
           if (succ_predicate.vars[i].name == pred.name) {
               succ_predicate.vars[i].isPrime = true;
               break;
           }
-        }        
-        pred.name = pred.name + PRIME_SIGN;  
+        }
+        pred.name = pred.name + PRIME_SIGN;
         imp.predicates.push_back(pred);
       }
 
@@ -560,14 +567,14 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
          imp.predicates.push_back(
              transform_br(BB->last_instruction, successor->BB_link));
       }
-      
-      result.push_back(imp); 
+
+      result.push_back(imp);
     }
 
     // From return instruction to function predicate implication
     if (BB->isLastBlock) {
       auto imp = Implication(get_function_predicate(&F));
-      
+
       if (!F.getReturnType()->isVoidTy()) {
          imp.head.vars.push_back(BB->return_value);
       }
@@ -578,7 +585,7 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
     }
   }
 
- 
+
   // Add error case implication
   if (failed_block) {
     Implication i = Implication(MyPredicate("false"));
@@ -592,8 +599,8 @@ transform_basic_blocks(std::unordered_map<std::uint8_t, MyBasicBlock> my_blocks,
 
 #pragma region Print implication
 void print_head_predicate(MyPredicate *p) {
-  errs() << p->name; 
-  
+  errs() << p->name;
+
   if (p->vars.size() > 0) {
     errs() << "( ";
     auto first = 1;
@@ -609,19 +616,19 @@ void print_head_predicate(MyPredicate *p) {
   }
 }
 
-void print_unary_predicate(MyPredicate *p) { 
+void print_unary_predicate(MyPredicate *p) {
   errs() << p->Print();
 }
 
-void print_binary_predicate(MyPredicate *p) { 
-  errs() << p->Print(); 
+void print_binary_predicate(MyPredicate *p) {
+  errs() << p->Print();
 }
 
-void print_implications(std::vector<Implication> implications) 
-{ 
+void print_implications(std::vector<Implication> implications)
+{
   errs() << "\nImplications:\n";
   for (auto &i : implications) {
-    
+
     // Print predicates
     auto first = 1;
     for (auto &p : i.predicates) {
@@ -630,11 +637,11 @@ void print_implications(std::vector<Implication> implications)
       } else {
         first = 0;
       }
-      
+
       errs() << p.Print();
     }
 
-    
+
     errs() << " -> ";
 
     //Print head
@@ -646,7 +653,7 @@ void print_implications(std::vector<Implication> implications)
 
 #pragma region Print SMT-LIB format
 // Print function declaration
-void smt_declare_function(MyPredicate *predicate) { 
+void smt_declare_function(MyPredicate *predicate) {
   output << "(declare-fun |" << predicate->name << "| (";
 
   for (auto v : predicate->vars) {
@@ -661,8 +668,8 @@ void smt_declare_function(MyPredicate *predicate) {
 }
 
 // Declare basic blocks as functions
-void smt_declare_functions(std::vector<Implication> *implications) { 
-  std::unordered_set<std::string> declared; 
+void smt_declare_functions(std::vector<Implication> *implications) {
+  std::unordered_set<std::string> declared;
 
   for (auto imp : *implications) {
     auto search = declared.find(imp.head.name);
@@ -676,12 +683,12 @@ void smt_declare_functions(std::vector<Implication> *implications) {
 }
 
 // Print HeadPredicate
-void smt_print_head_predicate(MyPredicate* predicate) { 
+void smt_print_head_predicate(MyPredicate* predicate) {
   auto var_size = predicate->vars.size();
   if (var_size > 0) {
     output << "(";
   }
-  
+
   output << predicate->name;
   for (auto v : predicate->vars) {
     auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
@@ -699,16 +706,16 @@ void smt_print_unary_predicate(MyPredicate *predicate) {
 
 // Print BinaryPredicate
 void smt_print_binary_predicate(MyPredicate *predicate) {
-  output << "(= " << predicate->name 
+  output << "(= " << predicate->name
          << " (" << predicate->sign << " "
-         << predicate->operand1 << " " 
+         << predicate->operand1 << " "
          << predicate->operand2
     << " ))";
 }
 
-// Call print for predicate 
+// Call print for predicate
 void smt_print_predicate(MyPredicate *predicate) {
-  switch (predicate->type) { 
+  switch (predicate->type) {
     case BINARY:
       smt_print_binary_predicate(predicate);
       return;
@@ -725,9 +732,9 @@ void smt_print_predicate(MyPredicate *predicate) {
 }
 
 // Print all predicates from implication
-void smt_print_predicates(std::vector<MyPredicate> predicates) { 
+void smt_print_predicates(std::vector<MyPredicate> predicates) {
   auto predicate_size = predicates.size();
-  
+
   if (predicate_size == 1) {
       smt_print_predicate(&predicates[0]);
   } else {
@@ -736,23 +743,23 @@ void smt_print_predicates(std::vector<MyPredicate> predicates) {
       for (auto p: predicates) {
         smt_print_predicate(&p);
       }
-      
+
     output << ')';
   }
-} 
+}
 
 // Print all variables from implication. All variables are in head predicates.
 int smt_quantifiers(Implication *imp, int indent) {
   std::map<std::string, std::string> vars;
-  
-  // Variables from head of implication 
+
+  // Variables from head of implication
   for (auto v : imp->head.vars) {
     if (!v.isConstant) {
       auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
       vars.insert(std::make_pair(name, v.type));
     }
   }
-  
+
   // Variables from head predicates from predicates
   for (auto h : imp->predicates) {
     for (auto v : h.vars) {
@@ -776,10 +783,10 @@ int smt_quantifiers(Implication *imp, int indent) {
 }
 
 // Create assert for implication
-void smt_declare_implication(Implication* implication) { 
+void smt_declare_implication(Implication* implication) {
   int indent = 0;
   output << std::string(indent++, ' ') << "(assert " << std::endl;
-  
+
   // Write all variables used in implication
   indent =smt_quantifiers(implication, indent);
 
@@ -789,13 +796,13 @@ void smt_declare_implication(Implication* implication) {
   output << std::string(indent, ' ');
   smt_print_predicates(implication->predicates);
   output << std::endl;
-  
+
   // Convert head of implication
   output << std::string(indent, ' ');
   smt_print_head_predicate(&implication->head);
   output << std::endl;
   indent--;
-  
+
   // Add ending parentheses
   while (indent >= 0) {
     output << std::string(indent--, ' ') << ")" << std::endl;
@@ -803,7 +810,7 @@ void smt_declare_implication(Implication* implication) {
 }
 
 // Convert implications
-void smt_declare_implications(std::vector<Implication> *implications) { 
+void smt_declare_implications(std::vector<Implication> *implications) {
   for (auto imp : *implications) {
     smt_declare_implication(&imp);
   }
@@ -811,12 +818,12 @@ void smt_declare_implications(std::vector<Implication> *implications) {
 
 // Convert my chc representation to SMT-LIB format
 void smt_print_implications(std::vector<Implication> *implications) {
-  
+
   /*output << "(set-logic HORN)" << std::endl;
   output << "(set-info :status sat)"
-         << std::endl 
+         << std::endl
          << std::endl;*/
-  
+
   smt_declare_functions(implications);
   output << std::endl;
 
@@ -831,13 +838,13 @@ void smt_print_implications(std::vector<Implication> *implications) {
 
 PreservedAnalyses CHCTransformPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
-  
+
   auto my_blocks = load_basic_block_info(F);
 
   auto implications = transform_basic_blocks(my_blocks, F);
 
   //print_info(my_blocks);
-    
+
   //print_implications(implications);
 
   smt_print_implications(&implications);

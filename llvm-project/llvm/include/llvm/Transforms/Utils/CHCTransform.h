@@ -96,14 +96,14 @@ struct MyPredicate {
     type = HEAD;
   }
 
-  MyPredicate() { 
+  MyPredicate() {
     type = UNKNOWN;
   }
 
   // Print predicate in implication as text
   std::string Print() {
     std::string res;
-    switch (type) { 
+    switch (type) {
       case BINARY:
         return name + " = " + operand1 + " " + sign + " " + operand2;
       case UNARY:
@@ -144,7 +144,7 @@ struct Implication {
 };
 
 struct MyBasicBlock {
-  // Reference to basic block 
+  // Reference to basic block
   BasicBlock *BB_link;
   // Name of basic block
   std::string name;
@@ -156,7 +156,7 @@ struct MyBasicBlock {
   std::vector<std::uint8_t> predecessors;
   // List of ids of successors of basic block
   std::vector<std::uint8_t> successors;
-  // Reference to last br instruction of basic block 
+  // Reference to last br instruction of basic block
   llvm::Instruction * last_instruction;
   // True if block calls wassert function and fails
   bool isFalseBlock;
@@ -174,7 +174,7 @@ struct MyBasicBlock {
     isLastBlock = false;
   }
 
-  MyBasicBlock() { 
+  MyBasicBlock() {
     BB_link = NULL;
     id = 0;
     isFalseBlock = false;
