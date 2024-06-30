@@ -19,6 +19,11 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
   "_wassert"
 };
 
+
+const std::unordered_set<std::string> MAIN_FUNCTIONS = {
+    "main"
+};
+
 enum MyPredicateType {
   HEAD,
   BINARY,
@@ -164,6 +169,7 @@ struct MyBasicBlock {
   bool isLastBlock;
   // Return variable from function
   MyVariable return_value;
+  bool isFunctionCalled;
 
   MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
     BB_link = BB_link_;
@@ -172,6 +178,7 @@ struct MyBasicBlock {
     last_instruction = nullptr;
     isFalseBlock = false;
     isLastBlock = false;
+    isFunctionCalled = false;
   }
 
   MyBasicBlock() {
@@ -180,6 +187,7 @@ struct MyBasicBlock {
     isFalseBlock = false;
     isLastBlock = false;
     last_instruction = NULL;
+    isFunctionCalled = false;
   }
 };
 
