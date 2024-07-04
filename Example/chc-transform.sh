@@ -22,7 +22,6 @@ fi
 
 
 echo "(set-logic HORN)" > $file_name.smt2
-echo "(set-info :status sat)" >> $file_name.smt2
 
 clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o $file_name.ll
 opt -passes=mem2reg -S $file_name.ll -o $file_name.ll
