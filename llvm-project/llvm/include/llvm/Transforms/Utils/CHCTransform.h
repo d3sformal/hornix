@@ -36,7 +36,6 @@ struct MyVariable {
   std::string name;
   std::string type;
   bool isPrime;
-  std::string constVal;
   bool isConstant;
 
   MyVariable(std::string name_, std::string type_, bool isPrime_) {
@@ -140,6 +139,7 @@ struct MyPredicate {
 };
 
 struct Implication {
+  // Implications structured as "predicates -> head"
   std::vector<MyPredicate> predicates;
   MyPredicate head;
 
@@ -167,8 +167,7 @@ struct MyBasicBlock {
   bool isFalseBlock;
   // True if it contains return instruction
   bool isLastBlock;
-  // Return variable from function
-  MyVariable return_value;
+  // True if there is call instruction in basic block
   bool isFunctionCalled;
 
   MyBasicBlock(BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
@@ -188,6 +187,25 @@ struct MyBasicBlock {
     isLastBlock = false;
     last_instruction = NULL;
     isFunctionCalled = false;
+  }
+};
+
+struct MyFunctionInfo {
+  // Indexed map of basic blocks
+  std::map<std::uint8_t, MyBasicBlock> basic_blocks;
+  // Function name
+  std::string function_name;
+  // True if function name is from MAIN_FUNCTIONS list
+  bool is_main_function;
+  // Type of variable to return from function
+  MyVariable return_value;
+  // Pointer to llvm function struct
+  Function *function_pointer;
+
+  MyFunctionInfo(Function * function_pointer_, std::string function_name_, bool is_main_) {
+    function_pointer = function_pointer_;
+    function_name = function_name_;
+    is_main_function = is_main_;
   }
 };
 
