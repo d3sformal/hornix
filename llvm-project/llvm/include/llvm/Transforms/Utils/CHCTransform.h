@@ -19,6 +19,9 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
   "_wassert"
 };
 
+const std::unordered_set<std::string> INT_CONST_FUNCTIONS = {
+    "__VERIFIER_nondet_uint"};
+
 
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
     "main"
@@ -29,6 +32,7 @@ enum MyPredicateType {
   BINARY,
   UNARY,
   FUNCTION,
+  VARIABLE,
   UNKNOWN
 };
 
@@ -72,11 +76,17 @@ struct MyPredicate {
   std::string operand2;
   std::vector<MyVariable> vars;
   std::string changed_var;
+  MyVariable variable;
 
   MyPredicate(std::string name_, std::string value_) {
     name = name_;
     operand1 = value_;
     type = UNARY;
+  }
+
+  MyPredicate(MyVariable variable_) {
+    variable = variable_;
+    type = VARIABLE;
   }
 
   MyPredicate(std::string name_, std::string op1, std::string sign_,
@@ -106,7 +116,7 @@ struct MyPredicate {
 
   // Print predicate in implication as text
   std::string Print() {
-    std::string res;
+    std::string res = "";
     switch (type) {
       case BINARY:
         return name + " = " + operand1 + " " + sign + " " + operand2;
@@ -130,6 +140,8 @@ struct MyPredicate {
           res += " )";
         }
         return res;
+      case VARIABLE:
+        return variable.name;
       case UNKNOWN:
       default:
         throw new std::logic_error("Unknown predicate type to print.");
@@ -201,11 +213,14 @@ struct MyFunctionInfo {
   MyVariable return_value;
   // Pointer to llvm function struct
   Function *function_pointer;
+  // Error index
+  int e_index;
 
   MyFunctionInfo(Function * function_pointer_, std::string function_name_, bool is_main_) {
     function_pointer = function_pointer_;
     function_name = function_name_;
     is_main_function = is_main_;
+    e_index = 0;
   }
 };
 
