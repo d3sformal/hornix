@@ -27,6 +27,8 @@ opt -disable-output $file_name.ll -passes=mem2reg,chc-transform >> $file_name.sm
 
 echo "(check-sat)" >> $file_name.smt2
 
-z3 -smt2 $file_name.smt2
+result=$(z3 -smt2 $file_name.smt2)
 
 rm $file_name.ll $file_name.smt2
+
+./check-result.o filename result
