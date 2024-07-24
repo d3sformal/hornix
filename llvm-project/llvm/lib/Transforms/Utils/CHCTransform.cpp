@@ -1037,7 +1037,7 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   //print_info(function_info.basic_blocks);
 
-  print_implications(implications);
+  //print_implications(implications);
 
   smt_print_implications(&implications);
 
