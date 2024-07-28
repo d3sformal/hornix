@@ -16,6 +16,7 @@ using namespace llvm;
 int var_index = 0;
 auto &output = std::cout;
 std::unordered_set<std::string> declared_functions;
+bool firstFunction = true;
 
 std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
@@ -413,6 +414,45 @@ MyPredicate tranform_function_call(Instruction *I,
   return predicate;
 }
 
+// Create predicate for zext instruction from i1 to i8
+MyPredicate transform_zext(Instruction *I){
+  auto output_type = get_type(I->getType());
+  auto input_type = get_type(I->getOperand(0)->getType());
+  
+  if (input_type == "Bool" && output_type == "Int")
+  {
+    // Transform zext to commnon function call
+    MyPredicate pred(ZEXT_BOOL_TO_INT);
+    pred.type = FUNCTION;
+    pred.vars.push_back(
+        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
+    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
+  
+    return pred;  
+  }
+
+  return MyPredicate("true");
+}
+
+// Create predicate for trunc instruction from i8 to i1
+MyPredicate transform_trunc(Instruction *I) {
+  auto output_type = get_type(I->getType());
+  auto input_type = get_type(I->getOperand(0)->getType());
+
+  if (input_type == "Int" && output_type == "Bool") {
+    // Transform trunc to commnon function call
+    MyPredicate pred(TRUNC_INT_TO_BOOL);
+    pred.type = FUNCTION;
+    pred.vars.push_back(
+        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
+    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
+
+    return pred;
+  }
+
+  return MyPredicate("true");
+}
+
 // Transform instructions to predicates from instructions in basic block
 std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
                                                 MyFunctionInfo *function_info) {
@@ -426,7 +466,6 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::Br:
     case Instruction::PHI:
     case Instruction::Ret:
-    case Instruction::ZExt:
       break;
     // Instructions with 1 predicate
     case Instruction::ICmp:
@@ -436,6 +475,12 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
       break;
     case Instruction::Call:
       result.push_back(tranform_function_call(&I, function_info));
+      break;
+    case Instruction::ZExt:
+      result.push_back(transform_zext(&I));
+      break;
+    case Instruction::Trunc:
+      result.push_back(transform_trunc(&I));
       break;
     default:
       //throw std::logic_error("Not implemented instruction");
@@ -755,6 +800,87 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
 
   return result;
 }
+
+// Create implications for zext function transformation 
+std::vector<Implication> create_zext_function() {
+  std::vector<Implication> result;
+
+  // true -> (zextBoolToInt0 z1)
+  std::vector<MyVariable> vars;
+  vars.push_back(MyVariable("z1", "Bool"));
+  MyPredicate z0_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(0), vars);
+  Implication zext0(z0_pred);
+  zext0.predicates.push_back(MyPredicate("true"));
+
+  result.push_back(zext0);
+
+  //(zextBoolToInt0 z1) & (= z3 (= z1 true)) -> (zextBoolToInt1 z1 z3)
+  vars.push_back(MyVariable("z3", "Bool"));
+  MyPredicate z1_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(1), vars);
+  Implication zext1(z1_pred);
+  zext1.predicates.push_back(z0_pred);
+  zext1.predicates.push_back(MyPredicate("z3", "z1", "=", "true"));
+
+  result.push_back(zext1);
+
+  //(zextBoolToInt1 z1 z3) & (= z3 true) -> (zextBoolToInt z1 1)
+  vars.pop_back();
+  vars.push_back(MyVariable("1"));
+  MyPredicate zext_pred = MyPredicate(ZEXT_BOOL_TO_INT, vars);
+  Implication zext2(zext_pred);
+  zext2.predicates.push_back(z1_pred);
+  zext2.predicates.push_back(MyPredicate("z3", "true"));
+
+  result.push_back(zext2);
+
+  //(zextBoolToInt1 z1 z3) & (= z3 false) -> (zextBoolToInt z1 0)
+  zext_pred.vars[1].name = "0";
+  Implication zext3(zext_pred);
+  zext3.predicates.push_back(z1_pred);
+  zext3.predicates.push_back(MyPredicate("z3", "false"));
+
+  result.push_back(zext3);
+
+  return result;
+}
+
+// Create implications for trunc function transformation
+std::vector<Implication> create_trunc_function() {
+  std::vector<Implication> result;
+
+  // true -> (truncIntToBool0 z1)
+  std::vector<MyVariable> vars;
+  vars.push_back(MyVariable("z1", "Int"));
+  MyPredicate z0_pred = MyPredicate(TRUNC_INT_TO_BOOL + std::to_string(0), vars);
+  Implication zext0(z0_pred);
+  zext0.predicates.push_back(MyPredicate("true"));
+
+  result.push_back(zext0);
+
+  //(truncIntToBool0 z1) & (= z3 (> z1 0)) -> (truncIntToBool z1 z3)
+  vars.push_back(MyVariable("z3", "Bool"));
+  MyPredicate z1_pred = MyPredicate(TRUNC_INT_TO_BOOL, vars);
+  Implication zext1(z1_pred);
+  zext1.predicates.push_back(z0_pred);
+  zext1.predicates.push_back(MyPredicate("z3", "z1", ">", "0"));
+
+  result.push_back(zext1);
+
+  return result;
+}
+std::vector<Implication> create_common_functions() {
+  std::vector<Implication> result;
+
+  std::vector<Implication> zext_fun = create_zext_function();
+
+  result.insert(result.end(), zext_fun.begin(), zext_fun.end());
+
+  std::vector<Implication> trunc_fun = create_trunc_function();
+
+  result.insert(result.end(), trunc_fun.begin(), trunc_fun.end());
+
+  return result;
+}
 #pragma endregion
 
 #pragma region Print implication
@@ -917,6 +1043,7 @@ void smt_print_predicates(std::vector<MyPredicate> predicates) {
 
       for (auto p: predicates) {
         smt_print_predicate(&p);
+        output << " ";
       }
 
     output << ')';
@@ -1036,6 +1163,16 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   auto implications = transform_basic_blocks(&function_info);
 
   //print_info(function_info.basic_blocks);
+
+  if (firstFunction) {
+    auto common_functions = create_common_functions();
+
+    //print_implications(common_functions);
+
+    smt_print_implications(&common_functions);
+    
+    firstFunction = false;
+  }
 
   //print_implications(implications);
 

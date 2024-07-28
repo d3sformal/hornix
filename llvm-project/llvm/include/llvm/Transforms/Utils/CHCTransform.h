@@ -22,6 +22,8 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
 const std::unordered_set<std::string> INT_CONST_FUNCTIONS = {
     "__VERIFIER_nondet_uint"};
 
+const std::string ZEXT_BOOL_TO_INT = "zextBoolToInt";
+const std::string TRUNC_INT_TO_BOOL = "truncIntToBool";
 
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
     "main"
