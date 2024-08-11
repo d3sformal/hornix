@@ -8,10 +8,9 @@ int inc(int x) {
 int main() {
 	int a = 0;
 	a = inc(a);
+	assert(a == 1);
 	int b = a + 2;
 	b = b + 3;
-	assert(a == 1);
-
-	assert(b == 7);
+	assert(b == 6);
 	return 0;
 }

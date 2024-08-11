@@ -10,3 +10,9 @@ void max(int a, int b)
 
   assert(c >= a && c >= b);
 }
+
+int main()
+{
+  max(1, 2);
+  return 1;
+}
