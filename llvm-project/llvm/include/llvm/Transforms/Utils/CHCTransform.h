@@ -24,6 +24,7 @@ const std::unordered_set<std::string> INT_CONST_FUNCTIONS = {
 
 const std::string ZEXT_BOOL_TO_INT = "zextBoolToInt";
 const std::string TRUNC_INT_TO_BOOL = "truncIntToBool";
+const std::string UNSIGNED_INT_FUNCTION = "__VERIFIER_nondet_uint";
 
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
     "main"
@@ -35,6 +36,7 @@ enum MyPredicateType {
   UNARY,
   FUNCTION,
   VARIABLE,
+  COMPARISON,
   UNKNOWN
 };
 
@@ -91,6 +93,13 @@ struct MyPredicate {
     type = VARIABLE;
   }
 
+  MyPredicate(MyVariable variable_, std::string sign_, std::string op2) {
+    variable = variable_;
+    sign = sign_;
+    operand2 = op2;
+    type = COMPARISON;
+  }
+
   MyPredicate(std::string name_, std::string op1, std::string sign_,
                   std::string op2) {
     name = name_;
@@ -124,6 +133,8 @@ struct MyPredicate {
         return name + " = " + operand1 + " " + sign + " " + operand2;
       case UNARY:
         return name + " = " + operand1;
+      case COMPARISON:
+        return variable.name + sign + operand2;
       case HEAD:
       case FUNCTION:
         res = name;

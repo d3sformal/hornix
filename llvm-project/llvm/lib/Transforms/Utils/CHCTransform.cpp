@@ -57,9 +57,25 @@ std::int8_t get_block_id_by_link(
 bool isFailedAssertCall(Instruction *I) {
 
   if (I->getOpcode() == Instruction::Call) {
+    
     if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+
       Function *fn = call_inst->getCalledFunction();
-      return ASSERT_FUNCTIONS.find(fn->getName().str()) != ASSERT_FUNCTIONS.end();
+      if (fn) {
+
+        auto function_name = fn->getName().str();
+
+        for (auto assert : ASSERT_FUNCTIONS) {
+
+          if (assert == function_name) {
+            return true;
+          } else if (function_name.find('?' + assert) == 0) {
+            return true;
+          } else if (function_name.find(assert) == 0) {
+            return true;
+          }
+        }
+      }
     }
   }
 
@@ -138,14 +154,18 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
     for (Instruction &I : block_link->instructionsWithoutDebug()) {
 
       // See if basic block handles failed assertion
-      if (isFailedAssertCall(&I)) {
+      if (isFailedAssertCall(&I)) {       
         BB->isFalseBlock = true;
         break;
       }
 
       // Remember function called in basic block (no assert)
       if (I.getOpcode() == Instruction::Call) {
-        BB->isFunctionCalled = true;
+        auto fn = dyn_cast<CallInst>(&I)->getCalledFunction();
+        if (fn && !fn->isDeclaration()) {
+
+          BB->isFunctionCalled = true;
+        }
       }
 
       // Remember last br instruction (should be only one)
@@ -328,13 +348,13 @@ MyPredicate transform_binary_inst(Instruction *I) {
     sign = "rem";
     break;
   case Instruction::Xor:
-    sign = "bvxor";
+    sign = "xor";
     break;
   case Instruction::And:
-    sign = "bvand";
+    sign = "and";
     break;
   case Instruction::Or:
-    sign = "bvor";
+    sign = "or";
     break;
   case Instruction::Shl:
     sign = "bvshl";
@@ -357,18 +377,20 @@ MyPredicate transform_binary_inst(Instruction *I) {
 // Create function predicate for function call
 MyPredicate tranform_function_call(Instruction *I,
                                    MyFunctionInfo *function_info) {
-  
+
   // Get function from instruction
   CallInst *call_inst = dyn_cast<CallInst>(I);
   Function *fn = call_inst->getCalledFunction();
-  std::string function_name = fn->getName().str();
+  std::string function_name = "";
+  if (fn) {
+    function_name = fn->getName().str();
+  }
   
-  if (fn->isDeclaration()) {
-    if (fn->getReturnType()->isVoidTy()) {
-      return MyPredicate("true");
+  if (!fn || fn->isDeclaration()) {
+    if (function_name.find(UNSIGNED_INT_FUNCTION, 0) != std::string::npos) {
+      return MyPredicate(MyVariable(convert_name_to_string(I), "Int"), ">=", "0");
     } else {
-      return MyPredicate(
-          MyVariable(function_name, get_type(fn->getReturnType())));
+      return MyPredicate("true");
     }    
   }
 
@@ -415,7 +437,7 @@ MyPredicate tranform_function_call(Instruction *I,
 }
 
 // Create predicate for zext instruction from i1 to i8
-MyPredicate transform_zext(Instruction *I){
+MyPredicate transform_zext(Instruction *I) {
   auto output_type = get_type(I->getType());
   auto input_type = get_type(I->getOperand(0)->getType());
   
@@ -458,6 +480,7 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
                                                 MyFunctionInfo *function_info) {
 
   std::vector<MyPredicate> result;
+  function_info->e_index = 0;
 
   for (Instruction &I: BB->BB_link->instructionsWithoutDebug()) {
 
@@ -471,6 +494,17 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::ICmp:
     case Instruction::Add:
     case Instruction::Sub:
+    case Instruction::Mul:
+    case Instruction::UDiv:
+    case Instruction::SDiv:
+    case Instruction::URem:
+    case Instruction::SRem:
+    case Instruction::Xor:
+    case Instruction::And:
+    case Instruction::Or:
+    case Instruction::Shl:
+    case Instruction::LShr:
+    case Instruction::AShr:
       result.push_back(transform_binary_inst(&I));
       break;
     case Instruction::Call:
@@ -630,7 +664,6 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
 
   // Create prime variables in predicates
   for (auto pred : predicates) { 
-    std::string var_changed;
 
     if (pred.type == FUNCTION) {
       auto var_changed = pred.changed_var;
@@ -666,7 +699,7 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
 
       if (pred.type == BINARY
           && prime_vars.find(pred.operand2) != prime_vars.end()) {
-        pred.operand1 = pred.operand2 + PRIME_SIGN;
+        pred.operand2 = pred.operand2 + PRIME_SIGN;
       }
 
       prime_vars.insert(pred.name);
@@ -678,6 +711,21 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
   imp.head = exit_predicate;
 
   return imp;
+}
+
+// Return variable to for end of the predicate if function is called in basic block
+MyVariable get_function_call_var(MyBasicBlock *BB, int e_index,
+                                 MyBasicBlock *successor) {
+  if (BB->last_instruction != nullptr && BB->successors.size() > 0) {
+    if (BB->successors.size() != 2 ||
+         successor->BB_link == BB->last_instruction->getOperand(2)) {
+      return MyVariable("false");
+    } else {
+      return MyVariable("e" + std::to_string(e_index), "Bool");
+    }
+  } else {
+    return MyVariable("false");
+  }
 }
 
 // Transform basic blocks to implications
@@ -712,14 +760,14 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
       // Translate phi instructions
       auto phi_predicates = transform_phi_instructions(BB, successor);
 
+      if (BB->isFunctionCalled) {
+          current_exit_predicate.vars.push_back(get_function_call_var(BB, function_info->e_index, successor));
+      }
+      
+      // Current BB exit predicate
+      imp.predicates.push_back(current_exit_predicate);
+
       if (phi_predicates.size() > 0) {
-
-        if (BB->isFunctionCalled) {
-          current_exit_predicate.vars.push_back(MyVariable("false"));
-        }
-
-         // Current BB exit predicate
-        imp.predicates.push_back(current_exit_predicate);
 
         // Set prime variables
         for (auto pred : phi_predicates) { 
@@ -736,19 +784,7 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
       }
       
       // Branch predicate if 2 successors
-      else if (BB->last_instruction != nullptr && BB->successors.size() > 0) {
-        if (BB->isFunctionCalled) {
-          if (BB->successors.size() != 2 ||
-                  successor->BB_link == BB->last_instruction->getOperand(2)) {
-            current_exit_predicate.vars.push_back(MyVariable("false"));
-          } else {
-            current_exit_predicate.vars.push_back(
-                  MyVariable("e" + std::to_string(function_info->e_index), "Bool"));
-          }
-        } 
-
-        // Current BB exit predicate
-        imp.predicates.push_back(current_exit_predicate);
+      if (BB->last_instruction != nullptr && BB->successors.size() > 0) {
         if (BB->successors.size() == 2) {
           imp.predicates.push_back(
               transform_br(BB->last_instruction, successor->BB_link));
@@ -868,6 +904,7 @@ std::vector<Implication> create_trunc_function() {
 
   return result;
 }
+
 std::vector<Implication> create_common_functions() {
   std::vector<Implication> result;
 
@@ -1000,6 +1037,12 @@ void smt_print_unary_predicate(MyPredicate *predicate) {
   output << "(= " << predicate->name << " " << predicate->operand1 << " )";
 }
 
+// Print ComparisionPredicate
+void smt_print_comparison_predicate(MyPredicate *predicate) {
+  output << "(" << predicate->sign << " " << predicate->variable.name << " "
+         << predicate->operand2 << " )";
+}
+
 // Print BinaryPredicate
 void smt_print_binary_predicate(MyPredicate *predicate) {
   if (predicate->sign == "!=") {
@@ -1019,6 +1062,9 @@ void smt_print_predicate(MyPredicate *predicate) {
       return;
     case UNARY:
       smt_print_unary_predicate(predicate);
+      return;
+    case COMPARISON:
+      smt_print_comparison_predicate(predicate);
       return;
     case HEAD:
     case FUNCTION:
@@ -1070,7 +1116,7 @@ int smt_quantifiers(Implication *imp, int indent) {
 
   // Variables from head predicates from predicates
   for (auto &p : imp->predicates) {
-    if (p.type == VARIABLE) {
+    if (p.type == VARIABLE || p.type == COMPARISON) {
         vars.insert(
             std::make_pair(p.variable.name, p.variable.name));
     } else {
