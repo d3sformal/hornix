@@ -12,19 +12,23 @@ extension="${filename##*.}"
 # Checking if the extension is "cpp" or "c"
 if [ "$extension" = "cpp" ]; then
   file_name=$(basename $1 .cpp)
+  
 
 elif [ "$extension" = "c" ]; then
   file_name=$(basename $1 .c)
+elif [ "$extension" = "i" ]; then
+  file_name=$(basename $1 .i)
+
 else
   echo "$filename is neither a C++ nor a C file."
   exit
 fi
 
 echo "(set-logic HORN)" > $file_name.smt2
-
-clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o $file_name.ll
-opt -passes=mem2reg -S LLVMIRs/$1.ll -o LLVMIRs/$1.ll
-opt -disable-output LLVMIRs/$1.ll -passes=chc-transform >> smt/$1.smt2
+  
+clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -emit-llvm $1 -o $file_name.ll
+opt -passes=mem2reg -S $file_name.ll -o $file_name.ll
+opt -disable-output $file_name.ll -passes=chc-transform >> $file_name.smt2
 
 echo "(check-sat)" >> $file_name.smt2
 

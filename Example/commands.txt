@@ -18,3 +18,9 @@ opt -S ex-max-no-opt.ll -passes=mem2reg  -o ex-mem2reg.ll
 
 ????
 BB0entry -> BB1entry = nemozu byt instrukcie?? Na zaciatku prveho bloku by nemalo byt phi 
+
+
+unreach_call -> false = unsat
+
+
+.c hasname function error
