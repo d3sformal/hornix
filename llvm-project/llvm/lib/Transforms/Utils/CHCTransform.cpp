@@ -163,7 +163,6 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
       if (I.getOpcode() == Instruction::Call) {
         auto fn = dyn_cast<CallInst>(&I)->getCalledFunction();
         if (fn && !fn->isDeclaration()) {
-
           BB->isFunctionCalled = true;
         }
       }
@@ -443,7 +442,7 @@ MyPredicate transform_zext(Instruction *I) {
   
   if (input_type == "Bool" && output_type == "Int")
   {
-    // Transform zext to commnon function call
+    // Transform zext to common function call
     MyPredicate pred(ZEXT_BOOL_TO_INT);
     pred.type = FUNCTION;
     pred.vars.push_back(
@@ -462,7 +461,7 @@ MyPredicate transform_trunc(Instruction *I) {
   auto input_type = get_type(I->getOperand(0)->getType());
 
   if (input_type == "Int" && output_type == "Bool") {
-    // Transform trunc to commnon function call
+    // Transform trunc to common function call
     MyPredicate pred(TRUNC_INT_TO_BOOL);
     pred.type = FUNCTION;
     pred.vars.push_back(
@@ -473,6 +472,24 @@ MyPredicate transform_trunc(Instruction *I) {
   }
 
   return MyPredicate("true");
+}
+
+// Create equality predicate for sext instruction
+MyPredicate transform_sext(Instruction *I) 
+{
+  return MyPredicate(convert_name_to_string(I),
+                     convert_name_to_string(I->getOperand(0)));
+}
+
+MyPredicate transform_logic_operand(Instruction *I) {
+  auto op1_type = get_type(I->getOperand(0)->getType());
+  auto op2_type = get_type(I->getOperand(1)->getType());
+
+  if (op1_type == "Bool" && op2_type == "Bool") {
+    return transform_binary_inst(I);
+  } else {
+    std::logic_error("Logic operation not on Bool");
+  }
 }
 
 // Transform instructions to predicates from instructions in basic block
@@ -487,8 +504,11 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     switch (I.getOpcode()) {
     // Instructions with no predicate
     case Instruction::Br:
+    case Instruction::CallBr:
+    case Instruction::IndirectBr:
     case Instruction::PHI:
     case Instruction::Ret:
+    case Instruction::Unreachable:
       break;
     // Instructions with 1 predicate
     case Instruction::ICmp:
@@ -499,13 +519,16 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::SDiv:
     case Instruction::URem:
     case Instruction::SRem:
-    case Instruction::Xor:
-    case Instruction::And:
-    case Instruction::Or:
     case Instruction::Shl:
     case Instruction::LShr:
     case Instruction::AShr:
       result.push_back(transform_binary_inst(&I));
+      break;
+    // Transform logic instruction on booleans
+    case Instruction::Xor:
+    case Instruction::And:
+    case Instruction::Or:
+      result.push_back(transform_logic_operand(&I));
       break;
     case Instruction::Call:
       result.push_back(tranform_function_call(&I, function_info));
@@ -516,8 +539,11 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::Trunc:
       result.push_back(transform_trunc(&I));
       break;
+    case Instruction::SExt:
+      result.push_back(transform_sext(&I));
+      break;
     default:
-      //throw std::logic_error("Not implemented instruction");
+      throw std::logic_error("Not implemented instruction");
       break;
     }
   }
@@ -1200,10 +1226,6 @@ void smt_print_implications(std::vector<Implication> *implications) {
 PreservedAnalyses CHCTransformPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
 
-  //std::cout << "CHC Pass"
-  //          << "\n";
-  //auto &c = AM.getResult<PromotePass>(F);
-
   auto function_info = load_my_function_info(F);
 
   auto implications = transform_basic_blocks(&function_info);
@@ -1227,7 +1249,40 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   return PreservedAnalyses::all();
 }
 
+
+//llvm::PassPluginLibraryInfo getMyFunctionPassPluginInfo() {
+//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", LLVM_VERSION_STRING,
+//          [](PassBuilder &PB) {
+//            PB.registerPipelineParsingCallback(
+//                [](StringRef Name, FunctionPassManager &FPM,
+//                   ArrayRef<PassBuilder::PipelineElement>) {
+//                  if (Name == "chc-transform") {
+//                    FPM.addPass(CHCTransformPass());
+//                    return true;
+//                  }
+//                  return false;
+//                });
+//          }};
+//}
+//
+//extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+//llvmGetPassPluginInfo() {
+//  return getMyFunctionPassPluginInfo();
+//}
+
+
 //PassPluginLibraryInfo getPassPluginInfo() {
+//  return {LLVM_PLUGIN_API_VERSION, "CHCPass", LLVM_VERSION_STRING,
+//          [](PassBuilder &PB) {
+//            PB.(
+//                [](FunctionPassManager &PM, OptimizationLevel Level) {
+//                  PM.addPass(CHCTransformPass());
+//                });
+//          }};
+//}
+
+//
+//
 //  const auto callback = [](PassBuilder &PB) {
 //    PB.registerPipelineEarlySimplificationEPCallback(
 //        [&](ModulePassManager &MPM, auto) {
