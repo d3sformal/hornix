@@ -1,10 +1,14 @@
 #!/bin/bash
 
-if [ "$#" -ne 1 ]; then
-    echo "Should be specified cpp file name"
+if [ "$#" -ne 2 ]; then
+    echo "Should be specified cpp file name and tmp-dir name"
+    exit
 fi
 
 filename="$1"
+dir_name="$2"
+
+mkdir -p $dir_name
 
 # Extracting the file extension
 extension="${filename##*.}"
@@ -24,14 +28,24 @@ else
   exit
 fi
 
-echo "(set-logic HORN)" > $file_name.smt2
+echo "(set-logic HORN)" > $dir_name/$file_name.smt2
   
-clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -emit-llvm $1 -o $file_name.ll
-opt -passes=mem2reg -S $file_name.ll -o $file_name.ll
-opt -disable-output $file_name.ll -passes=chc-transform >> $file_name.smt2
+clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -emit-llvm $1 -o $dir_name/$file_name.ll 2> /dev/null
+if [ $? -gt 0 ]; then 
+    echo "error"
+    exit
+fi 
+opt -passes=mem2reg -S $dir_name/$file_name.ll -o $dir_name/$file_name.ll 2> /dev/null
+if [ $? -gt 0 ]; then 
+    echo "error"
+    exit
+fi 
+opt -disable-output $dir_name/$file_name.ll -passes=chc-transform >> $dir_name/$file_name.smt2 2> /dev/null
+if [ $? -gt 0 ]; then 
+    echo "error"
+    exit
+fi 
 
-echo "(check-sat)" >> $file_name.smt2
+echo "(check-sat)" >> $dir_name/$file_name.smt2
 
-z3 -smt2 $file_name.smt2
-
-rm $file_name.ll $file_name.smt2
+./golem $dir_name/$file_name.smt2

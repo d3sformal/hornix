@@ -6,3 +6,8 @@ llvm-project/
 
 /Llvm.docx
 /Example/sv-benchmarks
+/*.docx
+/*.pdf
+/*.xlsx
+/Example/smt
+/Example/LLVMIRs

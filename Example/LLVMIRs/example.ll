@@ -5,43 +5,66 @@ target triple = "x86_64-pc-windows-msvc19.38.33134"
 
 $"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
 
-$"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@" = comdat any
+$"??_C@_1CC@BLCAIBDH@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = comdat any
+
+$"??_C@_1CO@GBOFFNIO@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAy?$AAo?$AAl?$AAd?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAx?$AAo?$AAl?$AAd?$AA?$AA@" = comdat any
 
 @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [12 x i16] [i16 101, i16 120, i16 97, i16 109, i16 112, i16 108, i16 101, i16 46, i16 99, i16 112, i16 112, i16 0], comdat, align 2
-@"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [6 x i16] [i16 120, i16 32, i16 62, i16 32, i16 121, i16 0], comdat, align 2
+@"??_C@_1CC@BLCAIBDH@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [17 x i16] [i16 120, i16 32, i16 62, i16 61, i16 32, i16 48, i16 32, i16 38, i16 38, i16 32, i16 121, i16 32, i16 62, i16 61, i16 32, i16 48, i16 0], comdat, align 2
+@"??_C@_1CO@GBOFFNIO@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAy?$AAo?$AAl?$AAd?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAx?$AAo?$AAl?$AAd?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [23 x i16] [i16 120, i16 32, i16 61, i16 61, i16 32, i16 121, i16 111, i16 108, i16 100, i16 32, i16 38, i16 38, i16 32, i16 121, i16 32, i16 61, i16 61, i16 32, i16 120, i16 111, i16 108, i16 100, i16 0], comdat, align 2
 
-; Function Attrs: mustprogress noinline uwtable
-define dso_local void @"?fun@@YAXXZ"() #0 {
-  br label %1
-
-1:                                                ; preds = %3, %0
-  %.01 = phi i32 [ 0, %0 ], [ %5, %3 ]
-  %.0 = phi i32 [ 1, %0 ], [ %4, %3 ]
-  %2 = icmp slt i32 %.01, 10
-  br i1 %2, label %3, label %6
-
-3:                                                ; preds = %1
-  %4 = add nsw i32 %.0, %.01
-  %5 = add nsw i32 %.01, 1
-  br label %1, !llvm.loop !5
-
-6:                                                ; preds = %1
-  %7 = icmp sgt i32 %.0, %.01
-  br i1 %7, label %9, label %8
-
-8:                                                ; preds = %6
-  call void @_wassert(ptr noundef @"??_C@_1M@GIONGGCF@?$AAx?$AA?5?$AA?$DO?$AA?5?$AAy?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 33)
-  br label %9
-
-9:                                                ; preds = %8, %6
-  %10 = phi i1 [ true, %6 ], [ false, %8 ]
-  ret void
+; Function Attrs: mustprogress noinline nounwind uwtable
+define dso_local noundef i32 @"?foo@@YAHHH@Z"(i32 noundef %0, i32 noundef %1) #0 {
+  %3 = add nsw i32 %0, %1
+  ret i32 %3
 }
 
-declare dso_local void @_wassert(ptr noundef, ptr noundef, i32 noundef) #1
+; Function Attrs: mustprogress noinline uwtable
+define dso_local noundef i32 @"?bar@@YAHHH@Z"(i32 noundef %0, i32 noundef %1) #1 {
+  %3 = sub nsw i32 %0, %1
+  %4 = icmp sge i32 %0, 0
+  br i1 %4, label %5, label %7
 
-attributes #0 = { mustprogress noinline uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+5:                                                ; preds = %2
+  %6 = icmp sge i32 %1, 0
+  br i1 %6, label %8, label %7
+
+7:                                                ; preds = %5, %2
+  call void @_wassert(ptr noundef @"??_C@_1CC@BLCAIBDH@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 67)
+  br label %8
+
+8:                                                ; preds = %7, %5
+  %9 = phi i1 [ true, %5 ], [ false, %7 ]
+  ret i32 %3
+}
+
+declare dso_local void @_wassert(ptr noundef, ptr noundef, i32 noundef) #2
+
+; Function Attrs: mustprogress noinline norecurse uwtable
+define dso_local noundef i32 @main() #3 {
+  %1 = call noundef i32 @"?foo@@YAHHH@Z"(i32 noundef 10, i32 noundef 1)
+  %2 = call noundef i32 @"?bar@@YAHHH@Z"(i32 noundef %1, i32 noundef 1)
+  %3 = call noundef i32 @"?bar@@YAHHH@Z"(i32 noundef %1, i32 noundef %2)
+  %4 = icmp eq i32 %3, 1
+  br i1 %4, label %5, label %7
+
+5:                                                ; preds = %0
+  %6 = icmp eq i32 %2, 10
+  br i1 %6, label %8, label %7
+
+7:                                                ; preds = %5, %0
+  call void @_wassert(ptr noundef @"??_C@_1CO@GBOFFNIO@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAy?$AAo?$AAl?$AAd?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AAx?$AAo?$AAl?$AAd?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 79)
+  br label %8
+
+8:                                                ; preds = %7, %5
+  %9 = phi i1 [ true, %5 ], [ false, %7 ]
+  ret i32 0
+}
+
+attributes #0 = { mustprogress noinline nounwind uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { mustprogress noinline uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #2 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { mustprogress noinline norecurse uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 
 !llvm.module.flags = !{!0, !1, !2, !3}
 !llvm.ident = !{!4}
@@ -51,5 +74,3 @@ attributes #1 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "t
 !2 = !{i32 7, !"uwtable", i32 2}
 !3 = !{i32 1, !"MaxTLSAlign", i32 65536}
 !4 = !{!"clang version 17.0.1"}
-!5 = distinct !{!5, !6}
-!6 = !{!"llvm.loop.mustprogress"}

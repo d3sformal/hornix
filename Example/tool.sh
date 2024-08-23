@@ -20,11 +20,12 @@ else
   exit
 fi
 
-echo "(set-logic HORN)" > smt/$1.smt2
+echo "(set-logic HORN)" > smt/$file_name.smt2
 
-clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o LLVMIRs/$1.ll
-opt -passes=mem2reg -S LLVMIRs/$1.ll -o LLVMIRs/$1.ll
-opt -disable-output LLVMIRs/$1.ll -passes=chc-transform >> smt/$1.smt2
+clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o LLVMIRs/$file_name.ll
+opt -passes=mem2reg -S LLVMIRs/$file_name.ll -o LLVMIRs/$file_name.ll
+opt -disable-output LLVMIRs/$file_name.ll -passes=chc-transform >> smt/$file_name.smt2
 
-echo "(check-sat)" >> smt/$1.smt2
-z3 -smt2 smt/$1.smt2
+echo "(check-sat)" >> smt/$file_name.smt2
+
+z3 -smt2 smt/$file_name.smt2
