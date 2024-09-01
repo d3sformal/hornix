@@ -48,4 +48,4 @@ fi
 
 echo "(check-sat)" >> $dir_name/$file_name.smt2
 
-./golem $dir_name/$file_name.smt2
+z3 -smt2 $dir_name/$file_name.smt2
