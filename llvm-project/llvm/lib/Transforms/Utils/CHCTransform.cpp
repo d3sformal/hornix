@@ -106,11 +106,11 @@ std::map<std::uint8_t, MyBasicBlock> load_basic_blocks(Function *F) {
   std::string function_name = F->getName().str();
 
   for (BasicBlock &BB : *F) {
-    if (!BB.hasName() && (first_block || BB.hasNPredecessorsOrMore(1))) {
-
+    if ((first_block || BB.hasNPredecessorsOrMore(1))) {
+      
       auto name = function_name + std::to_string(bb_index);
       BB.setName(name);
-
+     
       MyBasicBlock myBB(&BB, name, bb_index);
       basic_blocks.insert(std::make_pair(bb_index, myBB));
 
@@ -488,7 +488,7 @@ MyPredicate transform_logic_operand(Instruction *I) {
   if (op1_type == "Bool" && op2_type == "Bool") {
     return transform_binary_inst(I);
   } else {
-    std::logic_error("Logic operation not on Bool");
+    throw std::logic_error("Logic operation not on Bool");
   }
 }
 
@@ -1248,6 +1248,22 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   return PreservedAnalyses::all();
 }
+
+//PassPluginLibraryInfo getPassPluginInfo() {
+//  const auto callback = [](PassBuilder &PB) {
+//    PB.registerPipelineEarlySimplificationEPCallback(
+//        [&](ModulePassManager &MPM, auto) {
+//          MPM.addPass(createModuleToFunctionPassAdaptor(CHCTransformPass()));
+//          return true;
+//        });
+//  };
+//
+//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", "0.0.1", callback};
+//};
+//
+//extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
+//  return getPassPluginInfo();
+//}
 
 
 //llvm::PassPluginLibraryInfo getMyFunctionPassPluginInfo() {
