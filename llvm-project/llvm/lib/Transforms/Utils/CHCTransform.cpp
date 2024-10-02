@@ -558,7 +558,7 @@ MyPredicate get_function_predicate(MyFunctionInfo *function_info ,MyVariable e_i
   std::string var_type;
   Function *F = function_info->function_pointer;
   auto predicate =
-      MyPredicate(function_info->function_pointer->getName().str());
+      MyPredicate(function_info->function_name);
   
   // Add parameters
   for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
@@ -1249,21 +1249,20 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
   return PreservedAnalyses::all();
 }
 
-//PassPluginLibraryInfo getPassPluginInfo() {
-//  const auto callback = [](PassBuilder &PB) {
-//    PB.registerPipelineEarlySimplificationEPCallback(
-//        [&](ModulePassManager &MPM, auto) {
-//          MPM.addPass(createModuleToFunctionPassAdaptor(CHCTransformPass()));
-//          return true;
-//        });
-//  };
-//
-//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", "0.0.1", callback};
-//};
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
-//  return getPassPluginInfo();
-//}
+// extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
+// llvmGetPassPluginInfo() {
+//   return {LLVM_PLUGIN_API_VERSION, "MyFunPass", "v0.1", [](PassBuilder &PB) {
+//             PB.registerPipelineParsingCallback(
+//                 [](StringRef Name, FunctionPassManager &FPM,
+//                    ArrayRef<PassBuilder::PipelineElement>) {
+//                   if (Name == "my-pass") {
+//                     FPM.addPass(CHCTransformPass());
+//                     return true;
+//                   }
+//                   return false;
+//                 });
+//           }};
+// }
 
 
 //llvm::PassPluginLibraryInfo getMyFunctionPassPluginInfo() {

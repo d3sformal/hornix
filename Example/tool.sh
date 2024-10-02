@@ -22,7 +22,7 @@ fi
 
 echo "(set-logic HORN)" > smt/$file_name.smt2
 
-clang -Xclang -disable-O0-optnone -S -emit-llvm $1 -o LLVMIRs/$file_name.ll
+clang -Xclang -disable-O0-optnone -fdiscard-value-names -S -emit-llvm $1 -o LLVMIRs/$file_name.ll
 opt -passes=mem2reg -S LLVMIRs/$file_name.ll -o LLVMIRs/$file_name.ll
 opt -disable-output LLVMIRs/$file_name.ll -passes=chc-transform >> smt/$file_name.smt2
 

@@ -11,3 +11,4 @@ llvm-project/
 /*.xlsx
 /Example/smt
 /Example/LLVMIRs
+images
