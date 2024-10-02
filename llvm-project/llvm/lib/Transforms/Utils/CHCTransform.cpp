@@ -598,7 +598,7 @@ MyPredicate get_function_predicate(MyFunctionInfo *function_info ,MyVariable e_i
   std::string var_type;
   Function *F = function_info->function_pointer;
   auto predicate =
-      MyPredicate(function_info->function_pointer->getName().str());
+      MyPredicate(function_info->function_name);
   
   // Add parameters
   for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
