@@ -43,9 +43,10 @@ fi
 
 echo "(set-logic HORN)" > $filename.smt2
 
-$DIR/bin/clang-18 -Xclang -disable-O0-optnone -S -emit-llvm $fullname -o $filename.ll
+$DIR/bin/clang-18 -Xclang -disable-O0-optnone -S -emit-llvm $fullname -o $filename.ll 2>/dev/null
 $DIR/bin/opt -passes=mem2reg -S $filename.ll -o $filename.ll
 $DIR/bin/opt -disable-output $filename.ll -passes=chc-transform >> $filename.smt2
 
 echo "(check-sat)" >> $filename.smt2
+PATH="${DIR}/bin":${PATH}
 $DIR/bin/run-chc.py $filename.smt2 $fullname
