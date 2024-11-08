@@ -44,6 +44,10 @@ fi
 echo "(set-logic HORN)" > $filename.smt2
 
 $DIR/bin/clang-18 -Xclang -disable-O0-optnone -S -emit-llvm $fullname -o $filename.ll 2>/dev/null
+if [[ ! -e "${filename}.ll" || ! -s "${filename}.ll" ]]; then
+  echo "error"
+  exit 1
+fi
 $DIR/bin/opt -passes=mem2reg -S $filename.ll -o $filename.ll
 $DIR/bin/opt -disable-output $filename.ll -passes=chc-transform >> $filename.smt2
 
