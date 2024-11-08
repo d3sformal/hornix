@@ -30,12 +30,12 @@ fi
 
 echo "(set-logic HORN)" > $dir_name/$file_name.smt2
   
-clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -emit-llvm $1 -o $dir_name/$file_name.ll 2> /dev/null
+clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -fdiscard-value-names -emit-llvm $1 -o $dir_name/$file_name.ll 2> /dev/null
 if [ $? -gt 0 ]; then 
     echo "error"
     exit
 fi 
-opt -passes=mem2reg -S $dir_name/$file_name.ll -o $dir_name/$file_name.ll 2> /dev/null
+opt -passes=mem2reg,instsimplify -S $dir_name/$file_name.ll -o $dir_name/$file_name.ll 2> /dev/null
 if [ $? -gt 0 ]; then 
     echo "error"
     exit

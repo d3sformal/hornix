@@ -16,7 +16,6 @@ using namespace llvm;
 int var_index = 0;
 auto &output = std::cout;
 std::unordered_set<std::string> declared_functions;
-bool firstFunction = true;
 
 std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
@@ -101,22 +100,17 @@ MyFunctionInfo load_basic_info(Function& F) {
 std::map<std::uint8_t, MyBasicBlock> load_basic_blocks(Function *F) {
   
   int bb_index = 1;
-  bool first_block = true;
   std::map<std::uint8_t, MyBasicBlock> basic_blocks;
   std::string function_name = F->getName().str();
 
   for (BasicBlock &BB : *F) {
-    if ((first_block || BB.hasNPredecessorsOrMore(1))) {
-      
-      auto name = function_name + std::to_string(bb_index);
-      BB.setName(name);
+    auto name = function_name + std::to_string(bb_index);
+    BB.setName(name);
      
-      MyBasicBlock myBB(&BB, name, bb_index);
-      basic_blocks.insert(std::make_pair(bb_index, myBB));
+    MyBasicBlock myBB(&BB, name, bb_index);
+    basic_blocks.insert(std::make_pair(bb_index, myBB));
 
-      ++bb_index;
-    }
-    first_block = false;
+    ++bb_index;
   }
 
   return basic_blocks;
@@ -344,7 +338,7 @@ MyPredicate transform_binary_inst(Instruction *I) {
     break;
   case Instruction::URem:
   case Instruction::SRem:
-    sign = "rem";
+    sign = "mod";
     break;
   case Instruction::Xor:
     sign = "xor";
@@ -355,15 +349,6 @@ MyPredicate transform_binary_inst(Instruction *I) {
   case Instruction::Or:
     sign = "or";
     break;
-  case Instruction::Shl:
-    sign = "bvshl";
-    break;
-  case Instruction::LShr:
-    sign = "bvlshr";
-    break;
-  case Instruction::AShr:
-    sign = "bvashr";
-    break;  
   default:
     throw new std::logic_error("Wrong binary instruction.");
   }
@@ -387,7 +372,7 @@ MyPredicate tranform_function_call(Instruction *I,
   
   if (!fn || fn->isDeclaration()) {
     if (function_name.find(UNSIGNED_INT_FUNCTION, 0) != std::string::npos) {
-      return MyPredicate(MyVariable(convert_name_to_string(I), "Int"), ">=", "0");
+      return MyPredicate(convert_name_to_string(I), ">=", "0");
     } else {
       return MyPredicate("true");
     }    
@@ -437,38 +422,37 @@ MyPredicate tranform_function_call(Instruction *I,
 
 // Create predicate for zext instruction from i1 to i8
 MyPredicate transform_zext(Instruction *I) {
-  auto output_type = get_type(I->getType());
-  auto input_type = get_type(I->getOperand(0)->getType());
+  MyVariable input(convert_name_to_string(I->getOperand(0)),
+                   get_type(I->getOperand(0)->getType()));
+  MyVariable output(convert_name_to_string(I),
+                   get_type(I->getType()));
   
-  if (input_type == "Bool" && output_type == "Int")
+  if (input.type == "Bool" && output.type == "Int")
   {
-    // Transform zext to common function call
-    MyPredicate pred(ZEXT_BOOL_TO_INT);
-    pred.type = FUNCTION;
-    pred.vars.push_back(
-        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
-    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
-  
+    // Transform zext to ite predicate;
+    MyPredicate pred;
+    pred.type = ITE;
+    pred.name = output.name;
+    pred.condition = input.name;
+    pred.operand1 = "1";
+    pred.operand2 = "0";
+    
     return pred;  
+  } else {
+    return MyPredicate(output.name, input.name);
   }
-
-  return MyPredicate("true");
 }
 
 // Create predicate for trunc instruction from i8 to i1
 MyPredicate transform_trunc(Instruction *I) {
-  auto output_type = get_type(I->getType());
-  auto input_type = get_type(I->getOperand(0)->getType());
+  MyVariable input(convert_name_to_string(I->getOperand(0)),
+                   get_type(I->getOperand(0)->getType()));
+  MyVariable output(convert_name_to_string(I), get_type(I->getType()));
+  
 
-  if (input_type == "Int" && output_type == "Bool") {
-    // Transform trunc to common function call
-    MyPredicate pred(TRUNC_INT_TO_BOOL);
-    pred.type = FUNCTION;
-    pred.vars.push_back(
-        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
-    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
-
-    return pred;
+  if (input.type == "Int" && output.type == "Bool") {
+    // Transform trunc to binary predicate
+    return MyPredicate(output.name, input.name, "!=", "0");
   }
 
   return MyPredicate("true");
@@ -519,9 +503,6 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::SDiv:
     case Instruction::URem:
     case Instruction::SRem:
-    case Instruction::Shl:
-    case Instruction::LShr:
-    case Instruction::AShr:
       result.push_back(transform_binary_inst(&I));
       break;
     // Transform logic instruction on booleans
@@ -710,7 +691,7 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
       }
     }
 
-    else if (pred.type == UNARY || pred.type == BINARY) {
+    else if (pred.type == UNARY || pred.type == BINARY || pred.type == ITE) {
 
       for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
         if (exit_predicate.vars[i].name == pred.name) {
@@ -719,14 +700,21 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
         }
       }
 
-      if (prime_vars.find(pred.operand1) != prime_vars.end()) {
-        pred.operand1 = pred.operand1 + PRIME_SIGN;
-      }
+      if (pred.type == ITE &&
+          prime_vars.find(pred.condition) != prime_vars.end()) {
+        pred.condition = pred.condition + PRIME_SIGN;
+      } else {
 
-      if (pred.type == BINARY
-          && prime_vars.find(pred.operand2) != prime_vars.end()) {
-        pred.operand2 = pred.operand2 + PRIME_SIGN;
+        if (prime_vars.find(pred.operand1) != prime_vars.end()) {
+          pred.operand1 = pred.operand1 + PRIME_SIGN;
+        }
+
+        if (pred.type == BINARY &&
+            prime_vars.find(pred.operand2) != prime_vars.end()) {
+          pred.operand2 = pred.operand2 + PRIME_SIGN;
+        }
       }
+      
 
       prime_vars.insert(pred.name);
       pred.name = pred.name + PRIME_SIGN;
@@ -863,87 +851,6 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
   return result;
 }
 
-// Create implications for zext function transformation 
-std::vector<Implication> create_zext_function() {
-  std::vector<Implication> result;
-
-  // true -> (zextBoolToInt0 z1)
-  std::vector<MyVariable> vars;
-  vars.push_back(MyVariable("z1", "Bool"));
-  MyPredicate z0_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(0), vars);
-  Implication zext0(z0_pred);
-  zext0.predicates.push_back(MyPredicate("true"));
-
-  result.push_back(zext0);
-
-  //(zextBoolToInt0 z1) & (= z3 (= z1 true)) -> (zextBoolToInt1 z1 z3)
-  vars.push_back(MyVariable("z3", "Bool"));
-  MyPredicate z1_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(1), vars);
-  Implication zext1(z1_pred);
-  zext1.predicates.push_back(z0_pred);
-  zext1.predicates.push_back(MyPredicate("z3", "z1", "=", "true"));
-
-  result.push_back(zext1);
-
-  //(zextBoolToInt1 z1 z3) & (= z3 true) -> (zextBoolToInt z1 1)
-  vars.pop_back();
-  vars.push_back(MyVariable("1"));
-  MyPredicate zext_pred = MyPredicate(ZEXT_BOOL_TO_INT, vars);
-  Implication zext2(zext_pred);
-  zext2.predicates.push_back(z1_pred);
-  zext2.predicates.push_back(MyPredicate("z3", "true"));
-
-  result.push_back(zext2);
-
-  //(zextBoolToInt1 z1 z3) & (= z3 false) -> (zextBoolToInt z1 0)
-  zext_pred.vars[1].name = "0";
-  Implication zext3(zext_pred);
-  zext3.predicates.push_back(z1_pred);
-  zext3.predicates.push_back(MyPredicate("z3", "false"));
-
-  result.push_back(zext3);
-
-  return result;
-}
-
-// Create implications for trunc function transformation
-std::vector<Implication> create_trunc_function() {
-  std::vector<Implication> result;
-
-  // true -> (truncIntToBool0 z1)
-  std::vector<MyVariable> vars;
-  vars.push_back(MyVariable("z1", "Int"));
-  MyPredicate z0_pred = MyPredicate(TRUNC_INT_TO_BOOL + std::to_string(0), vars);
-  Implication zext0(z0_pred);
-  zext0.predicates.push_back(MyPredicate("true"));
-
-  result.push_back(zext0);
-
-  //(truncIntToBool0 z1) & (= z3 (> z1 0)) -> (truncIntToBool z1 z3)
-  vars.push_back(MyVariable("z3", "Bool"));
-  MyPredicate z1_pred = MyPredicate(TRUNC_INT_TO_BOOL, vars);
-  Implication zext1(z1_pred);
-  zext1.predicates.push_back(z0_pred);
-  zext1.predicates.push_back(MyPredicate("z3", "z1", ">", "0"));
-
-  result.push_back(zext1);
-
-  return result;
-}
-
-std::vector<Implication> create_common_functions() {
-  std::vector<Implication> result;
-
-  std::vector<Implication> zext_fun = create_zext_function();
-
-  result.insert(result.end(), zext_fun.begin(), zext_fun.end());
-
-  std::vector<Implication> trunc_fun = create_trunc_function();
-
-  result.insert(result.end(), trunc_fun.begin(), trunc_fun.end());
-
-  return result;
-}
 #pragma endregion
 
 #pragma region Print implication
@@ -1065,8 +972,8 @@ void smt_print_unary_predicate(MyPredicate *predicate) {
 
 // Print ComparisionPredicate
 void smt_print_comparison_predicate(MyPredicate *predicate) {
-  output << "(" << predicate->sign << " " << predicate->variable.name << " "
-         << predicate->operand2 << " )";
+  output << "(" << predicate->sign << " " << predicate->name << " "
+         << predicate->operand1 << " )";
 }
 
 // Print BinaryPredicate
@@ -1078,6 +985,13 @@ void smt_print_binary_predicate(MyPredicate *predicate) {
     output << "(= " << predicate->name << " (" << predicate->sign << " "
            << predicate->operand1 << " " << predicate->operand2 << " ))";
   }
+}
+
+// Print ITE
+void smt_print_ite_predicate(MyPredicate *predicate) {
+  output << "(= " << predicate->name << " (ite " << predicate->condition << " "
+         << predicate->operand1
+           << " " << predicate->operand2 << " ))";
 }
 
 // Call print for predicate
@@ -1096,8 +1010,8 @@ void smt_print_predicate(MyPredicate *predicate) {
     case FUNCTION:
       smt_print_head_predicate(predicate);
       return;
-    case VARIABLE:
-      predicate->Print();
+    case ITE:
+      smt_print_ite_predicate(predicate);
       return;
     case UNKNOWN:
       return;
@@ -1126,31 +1040,20 @@ void smt_print_predicates(std::vector<MyPredicate> predicates) {
 int smt_quantifiers(Implication *imp, int indent) {
   std::map<std::string, std::string> vars;
 
-  
-  if (imp->head.type == VARIABLE) {
-    vars.insert(
-        std::make_pair(imp->head.variable.name, imp->head.variable.name));
-  } else {
-    // Variables from head of implication
-    for (auto v : imp->head.vars) {
-        if (!v.isConstant) {
-        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-        vars.insert(std::make_pair(name, v.type));
-        }
-    }
+  // Variables from head of implication
+  for (auto v : imp->head.vars) {
+      if (!v.isConstant) {
+      auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+      vars.insert(std::make_pair(name, v.type));
+      }
   }
 
   // Variables from head predicates from predicates
   for (auto &p : imp->predicates) {
-    if (p.type == VARIABLE || p.type == COMPARISON) {
-        vars.insert(
-            std::make_pair(p.variable.name, p.variable.name));
-    } else {
-      for (auto &v : p.vars) {
-        if (!v.isConstant) {
-          auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-          vars.insert(std::make_pair(name, v.type));
-        }
+    for (auto &v : p.vars) {
+      if (!v.isConstant) {
+        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+        vars.insert(std::make_pair(name, v.type));
       }
     }
   }
@@ -1232,85 +1135,9 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   //print_info(function_info.basic_blocks);
 
-  if (firstFunction) {
-    auto common_functions = create_common_functions();
-
-    //print_implications(common_functions);
-
-    smt_print_implications(&common_functions);
-    
-    firstFunction = false;
-  }
-
   //print_implications(implications);
 
   smt_print_implications(&implications);
 
   return PreservedAnalyses::all();
 }
-
-//PassPluginLibraryInfo getPassPluginInfo() {
-//  const auto callback = [](PassBuilder &PB) {
-//    PB.registerPipelineEarlySimplificationEPCallback(
-//        [&](ModulePassManager &MPM, auto) {
-//          MPM.addPass(createModuleToFunctionPassAdaptor(CHCTransformPass()));
-//          return true;
-//        });
-//  };
-//
-//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", "0.0.1", callback};
-//};
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
-//  return getPassPluginInfo();
-//}
-
-
-//llvm::PassPluginLibraryInfo getMyFunctionPassPluginInfo() {
-//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", LLVM_VERSION_STRING,
-//          [](PassBuilder &PB) {
-//            PB.registerPipelineParsingCallback(
-//                [](StringRef Name, FunctionPassManager &FPM,
-//                   ArrayRef<PassBuilder::PipelineElement>) {
-//                  if (Name == "chc-transform") {
-//                    FPM.addPass(CHCTransformPass());
-//                    return true;
-//                  }
-//                  return false;
-//                });
-//          }};
-//}
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
-//llvmGetPassPluginInfo() {
-//  return getMyFunctionPassPluginInfo();
-//}
-
-
-//PassPluginLibraryInfo getPassPluginInfo() {
-//  return {LLVM_PLUGIN_API_VERSION, "CHCPass", LLVM_VERSION_STRING,
-//          [](PassBuilder &PB) {
-//            PB.(
-//                [](FunctionPassManager &PM, OptimizationLevel Level) {
-//                  PM.addPass(CHCTransformPass());
-//                });
-//          }};
-//}
-
-//
-//
-//  const auto callback = [](PassBuilder &PB) {
-//    PB.registerPipelineEarlySimplificationEPCallback(
-//        [&](ModulePassManager &MPM, auto) {
-//          MPM.addPass(PromotePass());
-//          MPM.addPass(CHCTransformPass());
-//          return true;
-//        });
-//  };
-//
-//  return {LLVM_PLUGIN_API_VERSION, "test", "0.0.1", callback};
-//};
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
-//  return getPassPluginInfo();
-//}

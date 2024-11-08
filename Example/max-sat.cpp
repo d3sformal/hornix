@@ -1,6 +1,6 @@
 #include <assert.h>
 
-void max(int a, int b)
+int max(int a, int b)
 {
   int c;
   if (a > b)
@@ -9,10 +9,11 @@ void max(int a, int b)
     c = b;
 
   assert(c >= a && c >= b);
+  return c;
 }
 
 int main()
 {
-  max(1, 2);
+  int m = max(1, 2);
   return 1;
 }

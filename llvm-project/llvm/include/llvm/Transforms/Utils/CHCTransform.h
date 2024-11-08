@@ -35,8 +35,8 @@ enum MyPredicateType {
   BINARY,
   UNARY,
   FUNCTION,
-  VARIABLE,
   COMPARISON,
+  ITE,
   UNKNOWN
 };
 
@@ -80,7 +80,7 @@ struct MyPredicate {
   std::string operand2;
   std::vector<MyVariable> vars;
   std::string changed_var;
-  MyVariable variable;
+  std::string condition;
 
   MyPredicate(std::string name_, std::string value_) {
     name = name_;
@@ -88,15 +88,10 @@ struct MyPredicate {
     type = UNARY;
   }
 
-  MyPredicate(MyVariable variable_) {
-    variable = variable_;
-    type = VARIABLE;
-  }
-
-  MyPredicate(MyVariable variable_, std::string sign_, std::string op2) {
-    variable = variable_;
+  MyPredicate(std::string name_, std::string sign_, std::string op1) {
+    name = name_;
     sign = sign_;
-    operand2 = op2;
+    operand1 = op1;
     type = COMPARISON;
   }
 
@@ -134,7 +129,7 @@ struct MyPredicate {
       case UNARY:
         return name + " = " + operand1;
       case COMPARISON:
-        return variable.name + sign + operand2;
+        return name + sign + operand1;
       case HEAD:
       case FUNCTION:
         res = name;
@@ -153,8 +148,8 @@ struct MyPredicate {
           res += " )";
         }
         return res;
-      case VARIABLE:
-        return variable.name;
+      case ITE:
+        return name + "=ite(" + condition + "," + operand1 + "," + operand2 + ")";
       case UNKNOWN:
       default:
         throw new std::logic_error("Unknown predicate type to print.");
