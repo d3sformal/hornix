@@ -37,6 +37,8 @@ enum MyPredicateType {
   FUNCTION,
   COMPARISON,
   ITE,
+  LOAD,
+  STORE,
   UNKNOWN
 };
 
@@ -150,6 +152,10 @@ struct MyPredicate {
         return res;
       case ITE:
         return name + "=ite(" + condition + "," + operand1 + "," + operand2 + ")";
+      case LOAD:
+        return name + " = " + operand1;
+      case STORE:
+        return name + " = " + operand1;
       case UNKNOWN:
       default:
         throw new std::logic_error("Unknown predicate type to print.");
