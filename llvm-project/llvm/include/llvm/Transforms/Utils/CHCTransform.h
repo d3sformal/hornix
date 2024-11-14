@@ -19,12 +19,10 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
   "_wassert"
 };
 
-const std::unordered_set<std::string> INT_CONST_FUNCTIONS = {
-    "__VERIFIER_nondet_uint"};
+const std::string UNSIGNED_UINT_FUNCTION = "__VERIFIER_nondet_uint";
+const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
+const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-const std::string ZEXT_BOOL_TO_INT = "zextBoolToInt";
-const std::string TRUNC_INT_TO_BOOL = "truncIntToBool";
-const std::string UNSIGNED_INT_FUNCTION = "__VERIFIER_nondet_uint";
 
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
     "main"

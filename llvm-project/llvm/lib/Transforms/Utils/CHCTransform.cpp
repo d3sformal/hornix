@@ -373,23 +373,44 @@ MyPredicate transform_binary_inst(Instruction *I) {
 }
 
 // Create function predicate for function call
-MyPredicate tranform_function_call(Instruction *I,
+std::vector<MyPredicate> tranform_function_call(Instruction *I,
                                    MyFunctionInfo *function_info) {
 
+  std::vector<MyPredicate> result;
+
   // Get function from instruction
-  CallInst *call_inst = dyn_cast<CallInst>(I);
+  CallInst *call_inst = cast<CallInst>(I);
+  
   Function *fn = call_inst->getCalledFunction();
   std::string function_name = "";
+
   if (fn) {
     function_name = fn->getName().str();
+  } else {
+    function_name = convert_name_to_string(I->getOperand(0));
   }
   
   if (!fn || fn->isDeclaration()) {
-    if (function_name.find(UNSIGNED_INT_FUNCTION, 0) != std::string::npos) {
-      return MyPredicate(convert_name_to_string(I), ">=", "0");
+    if (function_name.find(UNSIGNED_UINT_FUNCTION, 0) != std::string::npos) {
+      
+      result.push_back(MyPredicate(convert_name_to_string(I), ">=", "0"));
+      result.push_back(MyPredicate(convert_name_to_string(I), "<=", "4294967295"));     
+    
+    } else if (function_name.find(UNSIGNED_UCHAR_FUNCTION, 0) != std::string::npos) {
+      
+      result.push_back(MyPredicate(convert_name_to_string(I), ">=", "0"));
+      result.push_back(MyPredicate(convert_name_to_string(I), "<=", "255"));
+    
+    } else if (function_name.find(UNSIGNED_CHAR_FUNCTION, 0) != std::string::npos) {
+    
+      result.push_back(MyPredicate(convert_name_to_string(I), ">=", "-128"));
+      result.push_back( MyPredicate(convert_name_to_string(I), "<=", "127"));
+    
     } else {
-      return MyPredicate("true");
-    }    
+      
+      result.push_back(MyPredicate("true"));
+    }   
+    return result;
   }
 
   auto predicate = MyPredicate(function_name);
@@ -440,7 +461,8 @@ MyPredicate tranform_function_call(Instruction *I,
         MyVariable(var.first + "_" + std::to_string(var.second), "Int"));
   }
  
-  return predicate;
+  result.push_back(predicate);
+  return result;
 }
 
 // Create predicate for zext instruction
@@ -564,9 +586,12 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::Or:
       result.push_back(transform_logic_operand(&I));
       break;
-    case Instruction::Call:
-      result.push_back(tranform_function_call(&I, function_info));
+    case Instruction::Call: {
+      std::vector<MyPredicate> predicates =
+          tranform_function_call(&I, function_info);
+      result.insert(result.end(), predicates.begin(), predicates.end());
       break;
+    }
     case Instruction::ZExt:
       result.push_back(transform_zext(&I));
       break;
