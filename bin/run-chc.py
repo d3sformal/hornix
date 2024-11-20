@@ -95,7 +95,7 @@ WITNESS_TEMPLATE_V1 = '''\
 
 def run_z3(input_file, timeout = 900):
     # timeout in seconds, default 15 minutes
-    print ('running z3')
+    #print ('running z3')
     return subprocess.run(['/usr/bin/z3', f"-T:{timeout}", input_file], capture_output=True, text=True)
 
 def run_golem(input_file, engine = 'spacer', timeout = 900):
