@@ -78,6 +78,7 @@ WITNESS_TEMPLATE_V1 = '''\
  <key attr.name="predecessor" attr.type="string" for="edge" id="predecessor"/>
  <key attr.name="successor" attr.type="string" for="edge" id="successor"/>
  <key attr.name="witness-type" attr.type="string" for="graph" id="witness-type"/>
+ <key attr.name="creationtime" attr.type="string" for="graph" id="creationtime"/> 
  <graph edgedefault="directed">
   <data key="witness-type">{WITNESS_TYPE}</data>
   <data key="sourcecodelang">C</data>
@@ -86,7 +87,7 @@ WITNESS_TEMPLATE_V1 = '''\
   <data key="programfile">{INPUT_FILE}</data>
   <data key="programhash">{SHA256SUM}</data>
   <data key="architecture">32bit</data>
-  <data key="creationtime">{CREATION_TIME}</data>
+  <data key="creationtime">{CREATION_TIME}+01:00</data>
  </graph>
 </graphml>
 '''
