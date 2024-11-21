@@ -121,8 +121,8 @@ def create_witness_v1(witness_type):
     # data['invariant'] = ''
     # data['content'] = ''
 
-    output_file = Path(input_file).stem + '.graphml'
-    # output_file =  Path(input_file).parent.joinpath('witness.graphml')
+    # output_file = Path(input_file).stem + '.graphml'
+    output_file = 'witness.graphml'
     uuid = uuid.uuid4()
     with open(input_cfile, 'rb') as f:
         sha256 = hashlib.sha256(f.read()).hexdigest()
