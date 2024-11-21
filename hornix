@@ -36,6 +36,8 @@ if [ "$extension" = "cpp" ]; then
 
 elif [ "$extension" = "c" ]; then
   filename=$(basename $fullname .c)
+elif [ "$extension" = "i" ]; then
+  filename=$(basename $fullname .i)
 else
   echo "$fullname is neither a C++ nor a C file."
   exit
