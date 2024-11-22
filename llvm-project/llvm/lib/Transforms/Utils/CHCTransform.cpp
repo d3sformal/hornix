@@ -412,6 +412,18 @@ std::vector<MyPredicate> tranform_function_call(Instruction *I,
       result.push_back(MyPredicate(convert_name_to_string(I), ">=", "0"));
       result.push_back(MyPredicate(convert_name_to_string(I), "<=", "4294967295"));     
     
+    } else if (function_name.find(UNSIGNED_SHORT_FUNCTION, 0) !=
+               std::string::npos) {
+
+      result.push_back(MyPredicate(convert_name_to_string(I), ">=", "-32768"));
+      result.push_back(MyPredicate(convert_name_to_string(I), "<=", "32767"));
+
+    } else if (function_name.find(UNSIGNED_USHORT_FUNCTION, 0) !=
+               std::string::npos) {
+
+      result.push_back(MyPredicate(convert_name_to_string(I), ">=", "0"));
+      result.push_back(MyPredicate(convert_name_to_string(I), "<=", "65535"));
+
     } else if (function_name.find(UNSIGNED_UCHAR_FUNCTION, 0) != std::string::npos) {
       
       result.push_back(MyPredicate(convert_name_to_string(I), ">=", "0"));
@@ -1330,27 +1342,7 @@ void set_global_variables(Function *F) {
       global_vars[name] = 0;      
 
       j++;
-    }
-
-    /*try {
-
-      std::string type = get_type(var.getValueType());
-      if (type == "Bool" || type == "Int") {
-        auto name = "g" + std::to_string(j);
-        var.setName(name);
-
-        global_vars.push_back(MyVariable(name, type));
-
-        errs() << name << " : " << type << " : "
-               << convert_name_to_string(
-                      var.getInitializer())
-               << '\n';
-        ;
-
-        j++;
-      
-    } catch (...) { }  */
-    
+    }    
   }
 }
 

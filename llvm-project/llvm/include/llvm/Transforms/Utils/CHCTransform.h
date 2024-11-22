@@ -20,6 +20,8 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
 };
 
 const std::string UNSIGNED_UINT_FUNCTION = "__VERIFIER_nondet_uint";
+const std::string UNSIGNED_USHORT_FUNCTION = "__VERIFIER_nondet_ushort";
+const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
 const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
 const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
