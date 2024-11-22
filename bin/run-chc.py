@@ -83,11 +83,15 @@ WITNESS_TEMPLATE_V1 = '''\
   <data key="witness-type">{WITNESS_TYPE}</data>
   <data key="sourcecodelang">C</data>
   <data key="producer">Hornix-0.1.0</data>
-  <data key="specification">CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )</data>
+  <data key="specification">CHECK( init(main()), LTL(G ! call(reach_error())) )</data>
   <data key="programfile">{INPUT_FILE}</data>
   <data key="programhash">{SHA256SUM}</data>
   <data key="architecture">32bit</data>
   <data key="creationtime">{CREATION_TIME}+01:00</data>
+  <node id="42">
+    <data key="entry">true</data>
+    {VIOLATION_DATA}
+  </node>
  </graph>
 </graphml>
 '''
@@ -129,7 +133,7 @@ def create_witness_v1(witness_type):
 
 
     with open(output_file, 'wt') as f:
-        f.write(WITNESS_TEMPLATE_V1.format(INPUT_FILE=input_cfile, SHA256SUM=sha256, CREATION_TIME=str(datetime.datetime.now().isoformat(timespec='seconds')), WITNESS_TYPE='correctness_witness' if witness_type == 'sat' else 'violation_witness'))
+        f.write(WITNESS_TEMPLATE_V1.format(INPUT_FILE=input_cfile, SHA256SUM=sha256, CREATION_TIME=str(datetime.datetime.now().isoformat(timespec='seconds')), WITNESS_TYPE='correctness_witness' if witness_type == 'sat' else 'violation_witness', VIOLATION_DATA='' if witness_type == 'sat' else '<data key="violation">true</data>'))
 
 
 
