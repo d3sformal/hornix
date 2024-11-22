@@ -330,13 +330,29 @@ MyPredicate transform_br(Instruction *I, BasicBlock * successor) {
   return MyPredicate(convert_name_to_string(I->getOperand(0)), res);
 }
 
+MyPredicate transform_comparison(CmpInst *comparison) {
+  auto sign = cmp_sign(comparison);
+  auto * lhs = comparison->getOperand(0);
+  auto * rhs = comparison->getOperand(1);
+  auto asString = [&](Value* val) -> std::string {
+    if (auto asConstant = dyn_cast<ConstantInt>(val)) {
+      auto value = comparison->isSigned() ? asConstant->getSExtValue() : asConstant->getZExtValue();
+      return std::to_string(value);
+    }
+    return convert_name_to_string(val);
+  };
+  return MyPredicate(convert_name_to_string(comparison), asString(lhs), sign, asString(rhs));
+}
+
 // Create binary predicate from binary instructions
 MyPredicate transform_binary_inst(Instruction *I) {
   std::string sign;
   switch (I->getOpcode()) {
-  case Instruction::ICmp:
-    sign = cmp_sign(I);
-    break;
+  case Instruction::ICmp: {
+    auto * comp_inst = dyn_cast<CmpInst>(I);
+    assert(comp_inst);
+    return transform_comparison(comp_inst);
+  }
   case Instruction::Add:
     sign = "+";
     break;
