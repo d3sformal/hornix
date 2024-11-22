@@ -50,7 +50,7 @@ if [[ ! -e "${filename}.ll" || ! -s "${filename}.ll" ]]; then
   echo "UNKNOWN: Error during initial compilation"
   exit 1
 fi
-$DIR/bin/opt -passes=mem2reg -S $filename.ll -o $filename.ll
+$DIR/bin/opt -passes=mem2reg,instsimplify -S $filename.ll -o $filename.ll
 $($DIR/bin/opt -disable-output $filename.ll -passes=chc-transform >> $filename.smt2 2>/dev/null) || { echo  "UNKNOWN: Error during translation to CHC!"; exit 1; }
 
 echo "(check-sat)" >> $filename.smt2
