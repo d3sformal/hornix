@@ -139,6 +139,15 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
       }
     }
 
+    // if no predecessor, take is the first block and add parameters to variables
+    if (predecessors(block_link).empty()) {
+      Function *F = function_info->function_pointer;
+      // Load arguments as variables
+      for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
+        add_variable(arg, BB);
+      }
+    }
+
     // Set successors of block
     for (auto succ : successors(block_link)) {
       BB->successors.push_back(
