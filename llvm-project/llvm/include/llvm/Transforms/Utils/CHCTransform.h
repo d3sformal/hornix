@@ -4,6 +4,7 @@
 #include "llvm/IR/PassManager.h"
 #include <map>
 #include <unordered_set>
+#include <sstream>
 
 namespace llvm {
 
@@ -19,25 +20,26 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
   "_wassert"
 };
 
-const std::unordered_set<std::string> INT_CONST_FUNCTIONS = {
-    "__VERIFIER_nondet_uint"};
+const std::string UNSIGNED_UINT_FUNCTION = "__VERIFIER_nondet_uint";
+const std::string UNSIGNED_USHORT_FUNCTION = "__VERIFIER_nondet_ushort";
+const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
+const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
+const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-const std::string ZEXT_BOOL_TO_INT = "zextBoolToInt";
-const std::string TRUNC_INT_TO_BOOL = "truncIntToBool";
-const std::string UNSIGNED_INT_FUNCTION = "__VERIFIER_nondet_uint";
 
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
     "main"
 };
 
 enum MyPredicateType {
-  HEAD,
   BINARY,
   UNARY,
-  FUNCTION,
-  VARIABLE,
   COMPARISON,
-  UNKNOWN
+  ITE,
+  LOAD,
+  STORE,
+  PREDICATE,
+  FUNCTION
 };
 
 struct MyVariable {
@@ -72,100 +74,201 @@ struct MyVariable {
   }
 };
 
-struct MyPredicate {
-  MyPredicateType type;
+struct MyConstraint {
+  virtual ~MyConstraint() {}
+  virtual std::string Print() = 0;
+  virtual MyPredicateType GetType() = 0;
+  virtual std::string GetSMT() = 0;
+};
+
+struct MyPredicate : MyConstraint {
+  std::string name;
+  std::vector<MyVariable> vars;
+  virtual ~MyPredicate() {}
+  MyPredicate() {  }
+  MyPredicate(std::string name_) {
+    name = name_;
+  }
+  MyPredicate(std::string name_, std::vector<MyVariable> vars_) {
+    name = name_;
+    vars = vars_;
+  }
+
+  std::string Print() override {
+    auto res = name;
+    if (vars.size() > 0) {
+        res += "( ";
+        auto first = 1;
+        for (auto &v : vars) {
+          if (!first) {
+            res += ", ";
+          } else {
+            first = 0;
+          }
+          res += v.isPrime ? v.name + PRIME_SIGN : v.name;
+        }
+        res += " )";
+    }
+    return res;
+  }
+
+  std::string GetSMT() override {
+    std::ostringstream res;
+    auto var_size = vars.size();
+    if (var_size > 0) {
+        res << "(";
+    }
+
+    res << name;
+    for (auto v : vars) {
+        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+        res << " " << name;
+    }
+    if (var_size > 0) {
+        res << " )";
+    }
+
+    return res.str();
+  }
+  
+  MyPredicateType GetType() override { return PREDICATE; }
+};
+
+struct FunctionPredicate : MyPredicate {
+  std::string changed_var;
+  virtual ~FunctionPredicate() {}
+  FunctionPredicate() { }
+  FunctionPredicate(std::string name_) {
+    name = name_;
+  }
+  FunctionPredicate(std::string name_, std::vector<MyVariable> vars_) {
+    name = name_;
+    vars = vars_;
+  }
+
+  MyPredicateType GetType() override { return FUNCTION; }
+};
+struct ITEConstraint : MyConstraint {
+  std::string name;
+  std::string operand1;
+  std::string operand2;
+  std::string condition;
+  virtual ~ITEConstraint() {}
+  ITEConstraint(std::string name_, std::string op1, std::string condition_,
+                   std::string op2) {
+    name = name_;
+    operand1 = op1;
+    condition = condition_;
+    operand2 = op2;
+  }
+  std::string Print() override {
+    return name + "=ite(" + condition + "," + operand1 + "," + operand2 + ")";
+  }
+
+  std::string GetSMT() override 
+  {
+    return + "(= " + name + " (ite " + condition + " " + operand1 
+      + " " + operand2 + " ))";
+  }
+
+  MyPredicateType GetType() override { return ITE; }
+};
+struct BinaryConstraint : MyConstraint {
   std::string name;
   std::string operand1;
   std::string sign;
   std::string operand2;
-  std::vector<MyVariable> vars;
-  std::string changed_var;
-  MyVariable variable;
-
-  MyPredicate(std::string name_, std::string value_) {
-    name = name_;
-    operand1 = value_;
-    type = UNARY;
-  }
-
-  MyPredicate(MyVariable variable_) {
-    variable = variable_;
-    type = VARIABLE;
-  }
-
-  MyPredicate(MyVariable variable_, std::string sign_, std::string op2) {
-    variable = variable_;
-    sign = sign_;
-    operand2 = op2;
-    type = COMPARISON;
-  }
-
-  MyPredicate(std::string name_, std::string op1, std::string sign_,
-                  std::string op2) {
+  virtual ~BinaryConstraint() {}
+  BinaryConstraint(std::string name_, std::string op1, std::string sign_,
+              std::string op2) {
     name = name_;
     operand1 = op1;
     sign = sign_;
     operand2 = op2;
-    type = BINARY;
+  }
+  std::string Print() override {
+    return name + " = " + operand1 + " " + sign + " " + operand2;
   }
 
-  MyPredicate(std::string name_,
-                std::vector<MyVariable> vars_) {
+  std::string GetSMT() override 
+  {
+    if (sign == "!=") {
+        return "(= " + name + " (not (= " + operand1 + " " + operand2 + " )))";
+    } else {
+        return "(= " + name + " (" + sign + " " + operand1 + " " + operand2 + " ))";
+    }  
+  }
+
+  MyPredicateType GetType() override { return BINARY; }
+};
+struct UnaryConstraint : MyConstraint {
+  std::string name;
+  std::string operand1;
+  virtual ~UnaryConstraint() {}
+  UnaryConstraint(std::string name_, std::string value_) {
     name = name_;
-    vars = vars_;
-    type = HEAD;
+    operand1 = value_;
+  }
+  std::string Print() override { return name + " = " + operand1;
   }
 
-  MyPredicate(std::string name_) {
+  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
+
+  MyPredicateType GetType() override { return UNARY; }
+};
+struct ComparisonConstraint : MyConstraint {
+  std::string name;
+  std::string operand1;
+  std::string sign;
+  virtual ~ComparisonConstraint() {}
+  ComparisonConstraint(std::string name_, std::string sign_, std::string op1) {
     name = name_;
-    type = HEAD;
+    operand1 = op1;
+    sign = sign_;
+  }
+  std::string Print() override { return name + sign + operand1; }
+  std::string GetSMT() override 
+  {
+    return "(" + sign + " " + name + " " + operand1 + " )"; 
+  }
+  MyPredicateType GetType() override { return COMPARISON; }
+};
+struct LoadConstraint : MyConstraint {
+  std::string name;
+  std::string operand1;
+  virtual ~LoadConstraint() {}
+  LoadConstraint() {}
+  LoadConstraint(std::string name_, std::string value_) {
+    name = name_;
+    operand1 = value_;
+  }
+  std::string Print() override { return name + " = " + operand1;
   }
 
-  MyPredicate() {
-    type = UNKNOWN;
+  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
+
+  MyPredicateType GetType() override { return LOAD; }
+};
+struct StoreConstraint : MyConstraint {
+  std::string name;
+  std::string operand1;
+  virtual ~StoreConstraint() {}
+  StoreConstraint() {}
+  StoreConstraint(std::string name_, std::string value_) {
+    name = name_;
+    operand1 = value_;
+  }
+  std::string Print() override { return name + " = " + operand1;
   }
 
-  // Print predicate in implication as text
-  std::string Print() {
-    std::string res = "";
-    switch (type) {
-      case BINARY:
-        return name + " = " + operand1 + " " + sign + " " + operand2;
-      case UNARY:
-        return name + " = " + operand1;
-      case COMPARISON:
-        return variable.name + sign + operand2;
-      case HEAD:
-      case FUNCTION:
-        res = name;
-        if (vars.size() > 0) {
-          res += "( ";
-          auto first = 1;
-          for (auto &v : vars) {
-            if (!first) {
-              res += ", ";
-            } else {
-              first = 0;
-            }
-            res +=
-                v.isPrime ? v.name + PRIME_SIGN : v.name;
-          }
-          res += " )";
-        }
-        return res;
-      case VARIABLE:
-        return variable.name;
-      case UNKNOWN:
-      default:
-        throw new std::logic_error("Unknown predicate type to print.");
-    }
-  }
+  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
 
+  MyPredicateType GetType() override { return STORE; }
 };
 
 struct Implication {
   // Implications structured as "predicates -> head"
-  std::vector<MyPredicate> predicates;
+  std::vector<MyConstraint *> constraints;
   MyPredicate head;
 
   Implication(MyPredicate head_) {

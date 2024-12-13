@@ -16,7 +16,8 @@ using namespace llvm;
 int var_index = 0;
 auto &output = std::cout;
 std::unordered_set<std::string> declared_functions;
-bool firstFunction = true;
+std::unordered_map<std::string, int> global_vars;
+bool first_function = true;
 
 std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
@@ -56,27 +57,27 @@ std::int8_t get_block_id_by_link(
 // See if call instruction calls assert function
 bool isFailedAssertCall(Instruction *I) {
 
-  if (I->getOpcode() == Instruction::Call) {
-    
-    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+  if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
 
-      Function *fn = call_inst->getCalledFunction();
-      if (fn) {
+    Function *fn = call_inst->getCalledFunction();
+    if (fn) {
 
-        auto function_name = fn->getName().str();
+      auto function_name = fn->getName().str();
 
-        for (auto assert : ASSERT_FUNCTIONS) {
+      for (auto assert : ASSERT_FUNCTIONS) {
 
-          if (assert == function_name) {
-            return true;
-          } else if (function_name.find('?' + assert) == 0) {
-            return true;
-          } else if (function_name.find(assert) == 0) {
-            return true;
-          }
+        // Platforms transforms function name differently, 
+        // check function name also as substring or added 
+        // '?' at the beginning
+        if (assert == function_name) {
+          return true;
+        } else if (function_name.find('?' + assert) == 0) {
+          return true;
+        } else if (function_name.find(assert) == 0) {
+          return true;
         }
       }
-    }
+    }    
   }
 
   return false;
@@ -101,22 +102,16 @@ MyFunctionInfo load_basic_info(Function& F) {
 std::map<std::uint8_t, MyBasicBlock> load_basic_blocks(Function *F) {
   
   int bb_index = 1;
-  bool first_block = true;
   std::map<std::uint8_t, MyBasicBlock> basic_blocks;
   std::string function_name = F->getName().str();
 
   for (BasicBlock &BB : *F) {
-    if ((first_block || BB.hasNPredecessorsOrMore(1))) {
-      
-      auto name = function_name + std::to_string(bb_index);
-      BB.setName(name);
+    auto name = function_name + std::to_string(bb_index);
+    BB.setName(name);
      
-      MyBasicBlock myBB(&BB, name, bb_index);
-      basic_blocks.insert(std::make_pair(bb_index, myBB));
-
-      ++bb_index;
-    }
-    first_block = false;
+    MyBasicBlock myBB(&BB, name, bb_index);
+    basic_blocks.insert(std::make_pair(bb_index, myBB));
+    ++bb_index;
   }
 
   return basic_blocks;
@@ -141,6 +136,15 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
         for (auto v : function_info->basic_blocks[pred_id].vars) {
           add_variable(v, BB);
         }
+      } 
+    }
+
+    // First basic block without predecessors load function arguments
+    if (predecessors(block_link).empty()) {
+      Function *F = function_info->function_pointer;
+      // Load arguments as variables
+      for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
+        add_variable(arg, BB);
       }
     }
 
@@ -213,6 +217,7 @@ MyFunctionInfo load_my_function_info(Function &F) {
 #pragma endregion
 
 #pragma region Print my basic blocks
+// Print debug information about basic blocks
 void print_info(std::map<std::uint8_t, MyBasicBlock> my_blocks) {
 
   for (auto &it : my_blocks) {
@@ -251,12 +256,26 @@ void print_info(std::map<std::uint8_t, MyBasicBlock> my_blocks) {
 #pragma endregion
 
 #pragma region Transform basic blocks
+
+// Add global variables to basic block predicate
+void add_global_variables(MyPredicate* predicate, MyFunctionInfo* function_info) {
+
+  for (auto v : global_vars) {
+    if (!function_info->is_main_function) {
+      // No main function needs input value of global variable
+      predicate->vars.push_back(MyVariable(v.first, "Int"));  
+    }
+    predicate->vars.push_back(
+        MyVariable(v.first + "_" + std::to_string(v.second), "Int"));
+  }
+}
+
 // Convert Value name to std::string
-std::string convert_name_to_string(Value *BB) {
+std::string convert_name_to_string(Value *value) {
   std::string block_address;
   raw_string_ostream string_stream(block_address);
 
-  BB->printAsOperand(string_stream, false);
+  value->printAsOperand(string_stream, false);
 
   return string_stream.str();
 }
@@ -276,41 +295,32 @@ std::string get_type(Type *type) {
 
 // Transform Cmp instruction
 std::string cmp_sign(Instruction *I) {
-  std::string sign;
-  CmpInst *CmpI = (CmpInst *)I;
+  CmpInst *CmpI = cast<CmpInst>(I);
   switch (CmpI->getPredicate()) {
   case CmpInst::ICMP_EQ:
-    sign = "=";
-    break;
+    return "=";
   case CmpInst::ICMP_NE:
-    sign = "!=";
-    break;
+    return "!=";
   case CmpInst::ICMP_UGT:
   case CmpInst::ICMP_SGT:
-    sign = ">";
-    break;
+    return ">";
   case CmpInst::ICMP_UGE:
   case CmpInst::ICMP_SGE:
-    sign = ">=";
-    break;
+    return ">=";
   case CmpInst::ICMP_ULT:
   case CmpInst::ICMP_SLT:
-    sign = "<";
-    break;
+    return "<";
   case CmpInst::ICMP_ULE:
   case CmpInst::ICMP_SLE:
-    sign = "<=";
-    break;
+    return "<=";
   default:
-    sign = "?";
     throw std::logic_error("Unknown comparison symbol.");
     break;
   }
-  return sign;
 }
 
-// Create predicate for br instruction
-MyPredicate transform_br(Instruction *I, BasicBlock * successor) {
+// Create constraint for br instruction
+UnaryConstraint * transform_br(Instruction *I, BasicBlock * successor) {
   // Instruction must have 3 operands to jump
   if (I->getNumOperands() != 3) {
     throw new std::logic_error(
@@ -319,16 +329,34 @@ MyPredicate transform_br(Instruction *I, BasicBlock * successor) {
 
   std::string res = successor == I->getOperand(2) ? "true" : "false";
 
-  return MyPredicate(convert_name_to_string(I->getOperand(0)), res);
+  return new UnaryConstraint(convert_name_to_string(I->getOperand(0)), res);
 }
 
-// Create binary predicate from binary instructions
-MyPredicate transform_binary_inst(Instruction *I) {
+// Create binary constraint for comparison instruction
+BinaryConstraint * transform_comparison(Instruction *I) {
+  CmpInst *comparison = cast<CmpInst>(I);
+  auto sign = cmp_sign(comparison);
+  auto * lhs = comparison->getOperand(0);
+  auto * rhs = comparison->getOperand(1);
+
+  // Get constant value as signed or unsigned based on type of comparison
+  auto asString = [&](Value* val) -> std::string {
+    if (auto asConstant = dyn_cast<ConstantInt>(val)) {
+      auto value = comparison->isSigned() ? asConstant->getSExtValue() : asConstant->getZExtValue();
+      return std::to_string(value);
+    }
+    return convert_name_to_string(val);
+  };
+
+  return new BinaryConstraint(convert_name_to_string(comparison), asString(lhs), sign, asString(rhs));
+}
+
+// Create binary constraint from binary instructions
+BinaryConstraint * transform_binary_inst(Instruction *I) {
   std::string sign;
   switch (I->getOpcode()) {
-  case Instruction::ICmp:
-    sign = cmp_sign(I);
-    break;
+  case Instruction::ICmp: 
+    return transform_comparison(I);
   case Instruction::Add:
     sign = "+";
     break;
@@ -344,7 +372,7 @@ MyPredicate transform_binary_inst(Instruction *I) {
     break;
   case Instruction::URem:
   case Instruction::SRem:
-    sign = "rem";
+    sign = "mod";
     break;
   case Instruction::Xor:
     sign = "xor";
@@ -355,47 +383,80 @@ MyPredicate transform_binary_inst(Instruction *I) {
   case Instruction::Or:
     sign = "or";
     break;
-  case Instruction::Shl:
-    sign = "bvshl";
-    break;
-  case Instruction::LShr:
-    sign = "bvlshr";
-    break;
-  case Instruction::AShr:
-    sign = "bvashr";
-    break;  
   default:
     throw new std::logic_error("Wrong binary instruction.");
   }
 
-  return MyPredicate(convert_name_to_string(I),
+  return new BinaryConstraint(convert_name_to_string(I),
                          convert_name_to_string(I->getOperand(0)), sign,
                          convert_name_to_string(I->getOperand(1)));
 }
 
-// Create function predicate for function call
-MyPredicate tranform_function_call(Instruction *I,
+// Create constraints for function call
+std::vector<MyConstraint *> tranform_function_call(Instruction *I,
                                    MyFunctionInfo *function_info) {
 
+  std::vector<MyConstraint *> result;
+  CallInst *call_inst = cast<CallInst>(I);
+  
   // Get function from instruction
-  CallInst *call_inst = dyn_cast<CallInst>(I);
   Function *fn = call_inst->getCalledFunction();
   std::string function_name = "";
+
+  // If no function, name can be taken from instruction operand
   if (fn) {
     function_name = fn->getName().str();
+  } else {
+    function_name = convert_name_to_string(I->getOperand(0));
   }
   
+  // If function no declared, check name for predefined non-deterministic functions
   if (!fn || fn->isDeclaration()) {
-    if (function_name.find(UNSIGNED_INT_FUNCTION, 0) != std::string::npos) {
-      return MyPredicate(MyVariable(convert_name_to_string(I), "Int"), ">=", "0");
+    if (function_name.find(UNSIGNED_UINT_FUNCTION, 0) != std::string::npos) {
+      
+      result.push_back(new ComparisonConstraint(convert_name_to_string(I), ">=", "0"));
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), "<=", "4294967295"));     
+    
+    } else if (function_name.find(UNSIGNED_SHORT_FUNCTION, 0) !=
+               std::string::npos) {
+
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "-32768"));
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), "<=", "32767"));
+
+    } else if (function_name.find(UNSIGNED_USHORT_FUNCTION, 0) !=
+               std::string::npos) {
+
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "0"));
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), "<=", "65535"));
+
+    } else if (function_name.find(UNSIGNED_UCHAR_FUNCTION, 0) !=
+               std::string::npos) {
+      
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "0"));
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), "<=", "255"));
+    
+    } else if (function_name.find(UNSIGNED_CHAR_FUNCTION, 0) != std::string::npos) {
+    
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "-128"));
+      result.push_back(
+          new ComparisonConstraint(convert_name_to_string(I), "<=", "127"));
+    
     } else {
-      return MyPredicate("true");
-    }    
+      // If no predefined function, ignore call and add true constraint
+      result.push_back(new MyPredicate("true"));
+    }   
+    return result;
   }
-
-  auto predicate = MyPredicate(function_name);
-
-  predicate.type = FUNCTION;
+  
+  auto predicate = new FunctionPredicate(function_name);
   std::string var_name;
   std::string var_type;
 
@@ -405,11 +466,11 @@ MyPredicate tranform_function_call(Instruction *I,
       var_name = convert_name_to_string(arg->get());
       var_type = get_type(arg->get()->getType());
 
-      predicate.vars.push_back(MyVariable(var_name, var_type));
+      predicate->vars.push_back(MyVariable(var_name, var_type));
     } else {
       var_name = convert_name_to_string(arg->get());
 
-      predicate.vars.push_back(MyVariable(var_name));
+      predicate->vars.push_back(MyVariable(var_name));
     }
   }
 
@@ -417,71 +478,72 @@ MyPredicate tranform_function_call(Instruction *I,
   if (!fn->getReturnType()->isVoidTy()) {
     var_name = convert_name_to_string(I);
 
-    predicate.vars.push_back(MyVariable(var_name, get_type(fn->getReturnType()), true));
-    predicate.changed_var = var_name;
+    predicate->vars.push_back(MyVariable(var_name, get_type(fn->getReturnType()), true));
+    predicate->changed_var = var_name;
   }
 
-  // Add variables for input and output error
+  // Add variables for input error variable
   if (function_info->e_index == 0) {
-    predicate.vars.push_back(MyVariable("false"));
+    predicate->vars.push_back(MyVariable("false"));
   } else {
-    predicate.vars.push_back(
+    predicate->vars.push_back(
         MyVariable("e" + std::to_string(function_info->e_index), "Bool"));
   }
+  
+  // Add variables for output error variable
   ++function_info->e_index;
-  predicate.vars.push_back(
+  predicate->vars.push_back(
       MyVariable("e" + std::to_string(function_info->e_index), "Bool"));
+
+  // Add global variables input and output values
+  for (auto &var : global_vars) {
+    predicate->vars.push_back(
+        MyVariable(var.first + "_" + std::to_string(var.second), "Int"));
+    var.second++;
+    predicate->vars.push_back(
+        MyVariable(var.first + "_" + std::to_string(var.second), "Int"));
+  }
  
-  return predicate;
+  result.push_back(predicate);
+  return result;
 }
 
-// Create predicate for zext instruction from i1 to i8
-MyPredicate transform_zext(Instruction *I) {
-  auto output_type = get_type(I->getType());
-  auto input_type = get_type(I->getOperand(0)->getType());
+// Create constraint for zext instruction
+MyConstraint * transform_zext(Instruction *I) {
+  MyVariable input(convert_name_to_string(I->getOperand(0)),
+                   get_type(I->getOperand(0)->getType()));
+  MyVariable output(convert_name_to_string(I),
+                   get_type(I->getType()));
   
-  if (input_type == "Bool" && output_type == "Int")
-  {
-    // Transform zext to common function call
-    MyPredicate pred(ZEXT_BOOL_TO_INT);
-    pred.type = FUNCTION;
-    pred.vars.push_back(
-        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
-    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
+  if (input.type == "Bool" && output.type == "Int") {    
+    return new ITEConstraint(output.name, "1", input.name, "0");  
+  } else {
+    return new UnaryConstraint(output.name, input.name);
+  }
+}
+
+// Create constraint for trunc instruction 
+MyConstraint* transform_trunc(Instruction *I) {
+  MyVariable input(convert_name_to_string(I->getOperand(0)),
+                   get_type(I->getOperand(0)->getType()));
+  MyVariable output(convert_name_to_string(I), get_type(I->getType()));
   
-    return pred;  
+  if (input.type == "Int" && output.type == "Bool") {
+    return new BinaryConstraint(output.name, input.name, "!=", "0");
+  } else {
+    return new UnaryConstraint(output.name, input.name);
   }
-
-  return MyPredicate("true");
 }
 
-// Create predicate for trunc instruction from i8 to i1
-MyPredicate transform_trunc(Instruction *I) {
-  auto output_type = get_type(I->getType());
-  auto input_type = get_type(I->getOperand(0)->getType());
-
-  if (input_type == "Int" && output_type == "Bool") {
-    // Transform trunc to common function call
-    MyPredicate pred(TRUNC_INT_TO_BOOL);
-    pred.type = FUNCTION;
-    pred.vars.push_back(
-        MyVariable(convert_name_to_string(I->getOperand(0)), input_type));
-    pred.vars.push_back(MyVariable(convert_name_to_string(I), output_type));
-
-    return pred;
-  }
-
-  return MyPredicate("true");
-}
-
-// Create equality predicate for sext instruction
-MyPredicate transform_sext(Instruction *I) 
+// Create equality constraint for sext instruction
+MyConstraint * transform_sext(Instruction *I) 
 {
-  return MyPredicate(convert_name_to_string(I),
+  return new UnaryConstraint(convert_name_to_string(I),
                      convert_name_to_string(I->getOperand(0)));
 }
 
-MyPredicate transform_logic_operand(Instruction *I) {
+// Create constraint for logic instruction with boolean variables
+BinaryConstraint * transform_logic_operand(Instruction *I) {
   auto op1_type = get_type(I->getOperand(0)->getType());
   auto op2_type = get_type(I->getOperand(1)->getType());
 
@@ -492,17 +554,43 @@ MyPredicate transform_logic_operand(Instruction *I) {
   }
 }
 
-// Transform instructions to predicates from instructions in basic block
-std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
+// Create constraint for load instruction with global variable
+MyConstraint* transform_load_operand(Instruction *I) {
+
+  std::string global_var_name = I->getOperand(0)->getName().str();
+  int index = global_vars[global_var_name];
+
+  LoadConstraint * con = new LoadConstraint();
+  con->name = convert_name_to_string(I);
+  con->operand1 = global_var_name + "_" + std::to_string(index);
+  
+  return con;
+}
+
+// Create constraint for store instruction with global variable
+MyConstraint * transform_store_operand(Instruction *I) {
+  
+  std::string global_var_name = I->getOperand(1)->getName().str();
+  global_vars[global_var_name]++;
+  int index = global_vars[global_var_name];
+
+  StoreConstraint *con = new StoreConstraint();
+  con->name = global_var_name + "_" + std::to_string(index);
+  con->operand1 = convert_name_to_string(I->getOperand(0));
+
+  return con;
+}
+
+// Transform instructions to constraints from instructions in basic block
+std::vector<MyConstraint *> transform_instructions(MyBasicBlock *BB,
                                                 MyFunctionInfo *function_info) {
 
-  std::vector<MyPredicate> result;
+  std::vector<MyConstraint *> result;
   function_info->e_index = 0;
 
   for (Instruction &I: BB->BB_link->instructionsWithoutDebug()) {
-
     switch (I.getOpcode()) {
-    // Instructions with no predicate
+    // Instructions with no constraint
     case Instruction::Br:
     case Instruction::CallBr:
     case Instruction::IndirectBr:
@@ -510,7 +598,7 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::Ret:
     case Instruction::Unreachable:
       break;
-    // Instructions with 1 predicate
+    // Instructions with 1 constraint
     case Instruction::ICmp:
     case Instruction::Add:
     case Instruction::Sub:
@@ -518,20 +606,8 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::UDiv:
     case Instruction::SDiv:
     case Instruction::URem:
-    case Instruction::SRem:
-    case Instruction::Shl:
-    case Instruction::LShr:
-    case Instruction::AShr:
+    case Instruction::SRem: 
       result.push_back(transform_binary_inst(&I));
-      break;
-    // Transform logic instruction on booleans
-    case Instruction::Xor:
-    case Instruction::And:
-    case Instruction::Or:
-      result.push_back(transform_logic_operand(&I));
-      break;
-    case Instruction::Call:
-      result.push_back(tranform_function_call(&I, function_info));
       break;
     case Instruction::ZExt:
       result.push_back(transform_zext(&I));
@@ -542,23 +618,39 @@ std::vector<MyPredicate> transform_instructions(MyBasicBlock *BB,
     case Instruction::SExt:
       result.push_back(transform_sext(&I));
       break;
+    case Instruction::Load:
+      result.push_back(transform_load_operand(&I));
+      break;
+    case Instruction::Store:
+      result.push_back(transform_store_operand(&I));
+      break;
+    // Transform logic instruction on booleans
+    case Instruction::Xor:
+    case Instruction::And:
+    case Instruction::Or: 
+      result.push_back(transform_logic_operand(&I));
+      break;
+    case Instruction::Call: {
+      std::vector<MyConstraint *> predicates =
+          tranform_function_call(&I, function_info);
+      result.insert(result.end(), predicates.begin(), predicates.end());
+      break;
+    }    
     default:
       throw std::logic_error("Not implemented instruction");
-      break;
     }
   }
   return result;
 }
 
-// Create function predicate for current function
-MyPredicate get_function_predicate(MyFunctionInfo *function_info ,MyVariable e_in, MyVariable e_out) {
+// Create current function predicate not for call instruction
+MyPredicate * get_function_predicate(MyFunctionInfo *function_info ,MyVariable e_in, MyVariable e_out) {
 
   // Create predicate
   std::string var_name;
   std::string var_type;
   Function *F = function_info->function_pointer;
-  auto predicate =
-      MyPredicate(function_info->function_name);
+  auto predicate = new MyPredicate(F->getName().str());
   
   // Add parameters
   for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
@@ -566,44 +658,48 @@ MyPredicate get_function_predicate(MyFunctionInfo *function_info ,MyVariable e_i
       var_name = convert_name_to_string(arg);
       var_type = get_type(arg->getType());
 
-      predicate.vars.push_back(MyVariable(var_name, var_type));
+      predicate->vars.push_back(MyVariable(var_name, var_type));
     }
   }
 
   // Add return value
   if (!F->getReturnType()->isVoidTy()) {
-    predicate.vars.push_back(function_info->return_value);
+    predicate->vars.push_back(function_info->return_value);
   }
 
   if (!function_info->is_main_function) {
     // Add input and output errors
-    predicate.vars.push_back(e_in);
-    predicate.vars.push_back(e_out);
+    predicate->vars.push_back(e_in);
+    predicate->vars.push_back(e_out);
   }
+   
+  add_global_variables(predicate, function_info);
 
   return predicate;
 }
 
 // Return fail block predicate
-MyPredicate get_fail_block_predicate(MyFunctionInfo* function_info) {
+MyPredicate * get_fail_block_predicate(MyFunctionInfo* function_info) {
   if (function_info->is_main_function) {
     // Return new predicate if main function
-    return MyPredicate(function_info->function_name + "_error");
+    return new MyPredicate(function_info->function_name + "_error");
   } else {
     // Return function predicate with output error
-    return get_function_predicate(function_info, MyVariable("false"), MyVariable("true"));
+    return get_function_predicate(
+        function_info, MyVariable("false"), MyVariable("true"));
   }
 }
 
-// Create MyPredicate for basic : Format {name}({variables}), ex. BB1(%x1,%x2)
-MyPredicate get_head_predicate(MyBasicBlock *BB, bool isEntry, MyFunctionInfo* function_info ) {
+// Create predicate for basic block: Format {name}({variables}), ex. BB1(%x1,%x2)
+MyPredicate * get_basic_block_predicate(MyBasicBlock *BB, bool isEntry,
+                                MyFunctionInfo *function_info) {
 
   // Failed assert block
   if (BB->isFalseBlock) {
     return get_fail_block_predicate(function_info);
   }
 
-  // Normal basic block header
+  // Convert variables
   std::vector<MyVariable> vars;
   std::string var_name;
   std::string var_type;
@@ -617,9 +713,41 @@ MyPredicate get_head_predicate(MyBasicBlock *BB, bool isEntry, MyFunctionInfo* f
   }
 
   std::string suffix = isEntry ? "_entry" : "_exit" ;
+  return new MyPredicate(BB->name + suffix, vars);
+}
 
-  return MyPredicate(BB->name + suffix, vars);
+// Add constraints for global variables initialized values
+void initialize_global_variables(Implication *implication,
+                                                     MyFunctionInfo * function_info) {
+  if (function_info->is_main_function) {
+    // Main function takes initial values of variable
+    auto globals = function_info->function_pointer->getParent()->globals();
 
+    for (auto &var : globals) {
+      if (var.getValueType()->isIntegerTy()) {
+        auto name = var.getName().str();
+        ++global_vars[name];
+
+        StoreConstraint *store = new StoreConstraint();
+        store->name = name + "_" + std::to_string(global_vars[name]);
+        store->operand1 = convert_name_to_string(var.getInitializer());
+
+        implication->constraints.push_back(store);
+      }
+    }
+  } else {
+    // No main function takes values of global variable
+    // from input global variable in predicate
+    for (auto &var : global_vars) {
+      ++var.second;
+
+      StoreConstraint * store = new StoreConstraint();
+      store->name = var.first + "_" + std::to_string(var.second);
+      store->operand1 = var.first;
+
+      implication->constraints.push_back(store);
+    }
+  }
 }
 
 // Create first implication for function input and transfer to BB1
@@ -627,116 +755,166 @@ std::vector<Implication> get_entry_block_implications(MyFunctionInfo* function_i
 
   std::vector<Implication> result;
 
-  // Create basic block for entry
-  MyBasicBlock BB_entry(nullptr, function_info->function_name + "0", 0);
-  
+  // Create predicate for entry basic block with function arguments
+  MyBasicBlock BB_entry(nullptr, function_info->function_name + "0", 0);  
   Function *F = function_info->function_pointer;
-  // Load arguments as variables
   for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
     add_variable(arg, &BB_entry);
   }
-
-  MyPredicate predicate = get_head_predicate(&BB_entry, true, function_info);
+  auto predicate = get_basic_block_predicate(&BB_entry, true, function_info);
+  add_global_variables(predicate, function_info);
 
   // Create first implication (true -> BBentry(x1,..))
-  Implication imp(predicate);
-  imp.predicates.push_back(
-      MyPredicate("true"));
+  Implication implication(*predicate);
+  implication.constraints.push_back(new MyPredicate("true"));
+  result.push_back(implication);
 
-  result.push_back(imp);
+  // Create implication for transfer to first basic block 
+  // with initialized global variables
+  auto BB1_predicate = get_basic_block_predicate(BB1, true, function_info);  
+  Implication imp1(*BB1_predicate);
+  imp1.constraints.push_back(predicate);
+ 
+  initialize_global_variables(&imp1, function_info);
+  
+  if (!BB1->isFalseBlock) {
+    add_global_variables(BB1_predicate, function_info);
+  }
+  imp1.head = *BB1_predicate;
 
-  // Create transfer to BB1
-  Implication imp1(get_head_predicate(BB1, true, function_info));
-  imp1.predicates.push_back(predicate);
   result.push_back(imp1);
 
   return result;
 }
 
 // Set variables for phi instruction, depending on label before
-std::vector<MyPredicate> transform_phi_instructions(MyBasicBlock *predecessor,
+std::vector<UnaryConstraint *> transform_phi_instructions(MyBasicBlock *predecessor,
                                      MyBasicBlock *successor) {
 
-  std::vector<MyPredicate> result;
+  std::vector<UnaryConstraint *> result;
   Value *translation;
 
   for (Instruction &I : successor->BB_link->instructionsWithoutDebug()) {
     if (I.getOpcode() == Instruction::PHI) {
       translation = I.DoPHITranslation(successor->BB_link, predecessor->BB_link);
 
-      result.push_back(MyPredicate(convert_name_to_string(&I),
+      result.push_back(new UnaryConstraint(convert_name_to_string(&I),
                        convert_name_to_string(translation)));
     }
   }
   return result;
 }
 
+// Set variable in head predicate as prime when assigned new value in constraint
+void set_prime_var_in_head(MyPredicate* head_predicate, std::string var_name) {
+  for (unsigned int i = 0; i < head_predicate->vars.size(); i++) {
+    if (head_predicate->vars[i].name == var_name) {
+      head_predicate->vars[i].isPrime = true;
+      break;
+    }
+  }
+}
+
 // Create implication from entry to exit point in basic block
 Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info) {
   
-  MyPredicate entry_predicate = get_head_predicate(BB, true, function_info);
-  auto predicates = transform_instructions(BB, function_info);
-  MyPredicate exit_predicate = get_head_predicate(BB, false, function_info);
+  auto entry_predicate = get_basic_block_predicate(BB, true, function_info);
+  add_global_variables(entry_predicate, function_info);
+  
+  auto constraints = transform_instructions(BB, function_info);
+  
+  auto exit_predicate = get_basic_block_predicate(BB, false, function_info);
+  add_global_variables(exit_predicate, function_info);
 
   // Add last output error variable if some function called in BB
   if (BB->isFunctionCalled) {
-    exit_predicate.vars.push_back(MyVariable("e" + std::to_string(function_info->e_index), "Bool"));
+    exit_predicate->vars.push_back(MyVariable("e" + std::to_string(function_info->e_index), "Bool"));
   }
   
-  Implication imp(exit_predicate);
-  imp.predicates.push_back(entry_predicate);
+  Implication implication(*exit_predicate);
+  implication.constraints.push_back(entry_predicate);
 
   std::unordered_set<std::string> prime_vars;
 
-  // Create prime variables in predicates
-  for (auto pred : predicates) { 
-
-    if (pred.type == FUNCTION) {
-      auto var_changed = pred.changed_var;
-
-      for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
-        if (exit_predicate.vars[i].name == var_changed) {
-            exit_predicate.vars[i].isPrime = true;
-            break;
-        }
-      }
-
-      prime_vars.insert(var_changed);
-
-      for (unsigned int i = 0; i < pred.vars.size(); i++) {
-        if (prime_vars.find(pred.vars[i].name) != prime_vars.end()) {
-            pred.vars[i].isPrime = true;
+  // Create prime variables in predicates when new assignemnt
+  for (auto constraint : constraints) { 
+    
+    if (FunctionPredicate *fp = dynamic_cast<FunctionPredicate *>(constraint)) {
+      
+      set_prime_var_in_head(exit_predicate, fp->changed_var);
+      prime_vars.insert(fp->changed_var);
+      
+      // Set variables when assigned 
+      for (unsigned int i = 0; i < fp->vars.size(); i++) {
+        if (prime_vars.find(fp->vars[i].name) != prime_vars.end()) {
+          fp->vars[i].isPrime = true;
         }
       }
     }
 
-    else if (pred.type == UNARY || pred.type == BINARY) {
-
-      for (unsigned int i = 0; i < exit_predicate.vars.size(); i++) {
-        if (exit_predicate.vars[i].name == pred.name) {
-          exit_predicate.vars[i].isPrime = true;
-          break;
-        }
+    else if (BinaryConstraint *bc = dynamic_cast<BinaryConstraint *>(constraint)) {
+            
+      // Set operands when assigned before
+      if (prime_vars.find(bc->operand1) != prime_vars.end()) {
+        bc->operand1 = bc->operand1 + PRIME_SIGN;
+      }
+      if (prime_vars.find(bc->operand2) != prime_vars.end()) {
+        bc->operand2 = bc->operand2 + PRIME_SIGN;
       }
 
-      if (prime_vars.find(pred.operand1) != prime_vars.end()) {
-        pred.operand1 = pred.operand1 + PRIME_SIGN;
-      }
-
-      if (pred.type == BINARY
-          && prime_vars.find(pred.operand2) != prime_vars.end()) {
-        pred.operand2 = pred.operand2 + PRIME_SIGN;
-      }
-
-      prime_vars.insert(pred.name);
-      pred.name = pred.name + PRIME_SIGN;
+      // Set assigned variable as prime in current constraint and head predicate
+      set_prime_var_in_head(exit_predicate, bc->name);
+      prime_vars.insert(bc->name);
+      bc->name = bc->name + PRIME_SIGN;
     }
 
-    imp.predicates.push_back(pred);
+    else if (UnaryConstraint *uc = dynamic_cast<UnaryConstraint *>(constraint)) {
+      
+      // Set operands when assigned before
+      if (prime_vars.find(uc->operand1) != prime_vars.end()) {
+        uc->operand1 = uc->operand1 + PRIME_SIGN;
+      }
+
+      // Set assigned variable as prime in current constraint and head predicate
+      set_prime_var_in_head(exit_predicate, uc->name);
+      prime_vars.insert(uc->name);
+      uc->name = uc->name + PRIME_SIGN;
+    }
+
+    else if (ITEConstraint *ite = dynamic_cast<ITEConstraint *>(constraint)) {
+      
+      // Set condition operand as prime when assigned before
+      if (prime_vars.find(ite->condition) != prime_vars.end()) {
+        ite->condition = ite->condition + PRIME_SIGN;
+      }
+
+      // Set assigned variable as prime in current constraint and head predicate
+      set_prime_var_in_head(exit_predicate, ite->name);
+      prime_vars.insert(ite->name);
+      ite->name = ite->name + PRIME_SIGN;
+    } 
+    
+    else if (LoadConstraint *lc = dynamic_cast<LoadConstraint *>(constraint)) {
+
+      // Set assigned variable as prime in current constraint and head predicate
+      set_prime_var_in_head(exit_predicate, lc->name);
+      prime_vars.insert(lc->name);
+      lc->name = lc->name + PRIME_SIGN;
+    } 
+    
+    else if (StoreConstraint *sc = dynamic_cast<StoreConstraint *>(constraint)) {
+      
+      // Set operand as prime when assigned before
+      if (prime_vars.find(sc->operand1) != prime_vars.end()) {
+        sc->operand1 = sc->operand1 + PRIME_SIGN;
+      }
+    }
+      
+    implication.constraints.push_back(constraint);
   }
-  imp.head = exit_predicate;
+  implication.head = *exit_predicate;
 
-  return imp;
+  return implication;
 }
 
 // Return variable to for end of the predicate if function is called in basic block
@@ -774,347 +952,190 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
     
     // Create implications for transfers to successors
     for (auto &succ : BB->successors) {
-      MyPredicate current_exit_predicate =
-          get_head_predicate(BB, false, function_info);
+      auto current_exit_predicate =
+          get_basic_block_predicate(BB, false, function_info);
+      add_global_variables(current_exit_predicate, function_info);
 
       auto successor = &function_info->basic_blocks[succ];
-      auto succ_predicate = get_head_predicate(successor, true, function_info);
+      auto succ_predicate = get_basic_block_predicate(successor, true, function_info);
 
       // Create implication
-      Implication imp(succ_predicate);
+      Implication implication(*succ_predicate);
 
       // Translate phi instructions
-      auto phi_predicates = transform_phi_instructions(BB, successor);
+      auto phi_constraints = transform_phi_instructions(BB, successor);
 
       if (BB->isFunctionCalled) {
-          current_exit_predicate.vars.push_back(get_function_call_var(BB, function_info->e_index, successor));
-      }
-      
-      // Current BB exit predicate
-      imp.predicates.push_back(current_exit_predicate);
+          current_exit_predicate->vars.push_back(get_function_call_var(BB, function_info->e_index, successor));
+      }            
 
-      if (phi_predicates.size() > 0) {
+      // Add current BB exit predicate
+      implication.constraints.push_back(current_exit_predicate);
 
+      if (phi_constraints.size() > 0) {
         // Set prime variables
-        for (auto pred : phi_predicates) { 
-
-          for (unsigned int i = 0; i < succ_predicate.vars.size(); i++) {
-              if (succ_predicate.vars[i].name == pred.name) {
-                succ_predicate.vars[i].isPrime = true;
-                break;
-              }
-          }
-          pred.name = pred.name + PRIME_SIGN;
-          imp.predicates.push_back(pred);
+        for (auto constraint : phi_constraints) { 
+          set_prime_var_in_head(succ_predicate, constraint->name);
+          constraint->name = constraint->name + PRIME_SIGN;
+          implication.constraints.push_back(constraint);          
         }
       }
       
       // Branch predicate if 2 successors
       if (BB->last_instruction != nullptr && BB->successors.size() > 0) {
         if (BB->successors.size() == 2) {
-          imp.predicates.push_back(
-              transform_br(BB->last_instruction, successor->BB_link));
+          auto br = transform_br(BB->last_instruction, successor->BB_link);
+          if ((br->name == "true" && br->operand1 == "false") ||
+              (br->name == "false" && br->operand1 == "true")) {
+              continue;
+          }
+          implication.constraints.push_back(br);
         }
       }
 
-      imp.head = succ_predicate;
-      result.push_back(imp);
+      if (!successor->isFalseBlock) {
+        add_global_variables(succ_predicate, function_info);
+      }
+      implication.head = *succ_predicate;
+      result.push_back(implication);
     }
 
     // Add predicate if error in called function
     if (BB->isFunctionCalled) {
-      Implication imp(get_fail_block_predicate(function_info));
+      auto fail = get_fail_block_predicate(function_info);
+      Implication implication(*fail);
       
-      MyPredicate current_exit_predicate = get_head_predicate(BB, false, function_info);
-      current_exit_predicate.vars.push_back(MyVariable("true"));
-      imp.predicates.push_back(current_exit_predicate);
+      auto current_exit_predicate = get_basic_block_predicate(BB, false, function_info);
+      add_global_variables(current_exit_predicate, function_info);
+      current_exit_predicate->vars.push_back(MyVariable("true"));
+      implication.constraints.push_back(current_exit_predicate);
 
-      result.push_back(imp);
+      result.push_back(implication);
     }
 
     // From return instruction to function predicate implication
     if (BB->isLastBlock) {
-      auto imp = Implication(get_function_predicate(
-          function_info, MyVariable("false"), MyVariable("false")));
+      auto fun_predicate = get_function_predicate(
+          function_info, MyVariable("false"), MyVariable("false"));
 
-      MyPredicate current_exit_predicate =
-          get_head_predicate(BB, false, function_info);
+      auto implication = Implication(*fun_predicate);
+
+      auto current_exit_predicate =
+          get_basic_block_predicate(BB, false, function_info);
+      add_global_variables(current_exit_predicate, function_info);
       if (BB->isFunctionCalled) {
-        current_exit_predicate.vars.push_back(MyVariable("false"));
+        current_exit_predicate->vars.push_back(MyVariable("false"));
       }
-      imp.predicates.push_back(current_exit_predicate);
+      implication.constraints.push_back(current_exit_predicate);
 
-      result.push_back(imp);
+      result.push_back(implication);
 
     }
   }
 
   // Add error case implication
   if (function_info->is_main_function) {
-    Implication i = Implication(MyPredicate("false"));
-    i.predicates.push_back(MyPredicate(function_info->function_name + "_error"));
-    result.push_back(i);
+    Implication implication = Implication(MyPredicate("false"));
+    auto fail_predicate = get_fail_block_predicate(function_info);
+    implication.constraints.push_back(fail_predicate);
+    result.push_back(implication);
   } else {
-    Implication i = Implication(
-        get_function_predicate(function_info, MyVariable("true"), MyVariable("true")));
-    result.push_back(i);
+    auto function_predicate =  get_function_predicate(function_info, MyVariable("true"), MyVariable("true"));
+    Implication implication(*function_predicate);
+    result.push_back(implication);
   }
 
   return result;
 }
 
-// Create implications for zext function transformation 
-std::vector<Implication> create_zext_function() {
-  std::vector<Implication> result;
-
-  // true -> (zextBoolToInt0 z1)
-  std::vector<MyVariable> vars;
-  vars.push_back(MyVariable("z1", "Bool"));
-  MyPredicate z0_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(0), vars);
-  Implication zext0(z0_pred);
-  zext0.predicates.push_back(MyPredicate("true"));
-
-  result.push_back(zext0);
-
-  //(zextBoolToInt0 z1) & (= z3 (= z1 true)) -> (zextBoolToInt1 z1 z3)
-  vars.push_back(MyVariable("z3", "Bool"));
-  MyPredicate z1_pred = MyPredicate(ZEXT_BOOL_TO_INT + std::to_string(1), vars);
-  Implication zext1(z1_pred);
-  zext1.predicates.push_back(z0_pred);
-  zext1.predicates.push_back(MyPredicate("z3", "z1", "=", "true"));
-
-  result.push_back(zext1);
-
-  //(zextBoolToInt1 z1 z3) & (= z3 true) -> (zextBoolToInt z1 1)
-  vars.pop_back();
-  vars.push_back(MyVariable("1"));
-  MyPredicate zext_pred = MyPredicate(ZEXT_BOOL_TO_INT, vars);
-  Implication zext2(zext_pred);
-  zext2.predicates.push_back(z1_pred);
-  zext2.predicates.push_back(MyPredicate("z3", "true"));
-
-  result.push_back(zext2);
-
-  //(zextBoolToInt1 z1 z3) & (= z3 false) -> (zextBoolToInt z1 0)
-  zext_pred.vars[1].name = "0";
-  Implication zext3(zext_pred);
-  zext3.predicates.push_back(z1_pred);
-  zext3.predicates.push_back(MyPredicate("z3", "false"));
-
-  result.push_back(zext3);
-
-  return result;
-}
-
-// Create implications for trunc function transformation
-std::vector<Implication> create_trunc_function() {
-  std::vector<Implication> result;
-
-  // true -> (truncIntToBool0 z1)
-  std::vector<MyVariable> vars;
-  vars.push_back(MyVariable("z1", "Int"));
-  MyPredicate z0_pred = MyPredicate(TRUNC_INT_TO_BOOL + std::to_string(0), vars);
-  Implication zext0(z0_pred);
-  zext0.predicates.push_back(MyPredicate("true"));
-
-  result.push_back(zext0);
-
-  //(truncIntToBool0 z1) & (= z3 (> z1 0)) -> (truncIntToBool z1 z3)
-  vars.push_back(MyVariable("z3", "Bool"));
-  MyPredicate z1_pred = MyPredicate(TRUNC_INT_TO_BOOL, vars);
-  Implication zext1(z1_pred);
-  zext1.predicates.push_back(z0_pred);
-  zext1.predicates.push_back(MyPredicate("z3", "z1", ">", "0"));
-
-  result.push_back(zext1);
-
-  return result;
-}
-
-std::vector<Implication> create_common_functions() {
-  std::vector<Implication> result;
-
-  std::vector<Implication> zext_fun = create_zext_function();
-
-  result.insert(result.end(), zext_fun.begin(), zext_fun.end());
-
-  std::vector<Implication> trunc_fun = create_trunc_function();
-
-  result.insert(result.end(), trunc_fun.begin(), trunc_fun.end());
-
-  return result;
-}
 #pragma endregion
 
 #pragma region Print implication
-void print_head_predicate(MyPredicate *p) {
-  errs() << p->name;
-
-  if (p->vars.size() > 0) {
-    errs() << "( ";
-    auto first = 1;
-    for (auto &v : p->vars) {
-      if (!first) {
-         errs() << ", ";
-      } else {
-         first = 0;
-      }
-      errs() << v.name ;
-    }
-    errs() << " )";
-  }
-}
-
-void print_unary_predicate(MyPredicate *p) {
-  errs() << p->Print();
-}
-
-void print_binary_predicate(MyPredicate *p) {
-  errs() << p->Print();
-}
-
+// Print implication into console in readable form
 void print_implications(std::vector<Implication> implications)
 {
   errs() << "\nImplications:\n";
   for (auto &i : implications) {
 
-    if (!i.predicates.empty()) {
+    if (!i.constraints.empty()) {
       // Print predicates
       auto first = 1;
-      for (auto &p : i.predicates) {
+      for (auto &p : i.constraints) {
          if (!first) {
           errs() << " & ";
          } else {
           first = 0;
          }
-
-         errs() << p.Print();
+         errs() << p->Print();
       }
-
       errs() << " -> ";
     }
-
     //Print head
     errs() << i.head.Print();
     errs() << "\n";
   }
 }
+
+
+
 #pragma endregion
 
 #pragma region Print SMT-LIB format
 // Print function declaration
-void smt_declare_function(MyPredicate *predicate) {
-  if ( (predicate->type != FUNCTION && predicate->type != HEAD) ||
-    predicate->name == "false" || predicate->name == "true" ||
-    declared_functions.find(predicate->name) != declared_functions.end()
-    ) {
-    return;
-  }
-  output << "(declare-fun |" << predicate->name << "| (";
+void smt_declare_function(MyConstraint *predicate) {
+  if (predicate->GetType() == PREDICATE) {
+    if (MyPredicate *pred = dynamic_cast<MyPredicate *>(predicate)) {
+      if (declared_functions.find(pred->name) == declared_functions.end() 
+          && pred->name != "true"
+          && pred->name != "false") {
+ 
+        output << "(declare-fun |" << pred->name << "| (";
 
-  for (auto v : predicate->vars) {
-    if (v.isConstant) {
-      if (v.name != "false" && v.name != "true") {
-        output << " " << "Int";
-      } else {
-        output << " " << "Bool";
+        for (auto v : pred->vars) {
+          if (v.isConstant) {
+              if (v.name != "false" && v.name != "true") {
+              output << " "
+                      << "Int";
+              } else {
+              output << " "
+                      << "Bool";
+              }
+          } else {
+              output << " " << v.type;
+          }
+        }
+
+        output << ") Bool )" << std::endl;
+
+        declared_functions.insert(pred->name);
       }
-    } else {
-      output << " " << v.type;
-    }
-  }
-
-  output << ") Bool )" << std::endl;
-
-  declared_functions.insert(predicate->name);
+    }  
+  }  
 }
 
-// Declare basic blocks as functions
+// Declare predicates as functions
 void smt_declare_functions(std::vector<Implication> *implications) {
   std::unordered_set<std::string> declared;
 
-  for (auto imp : *implications) {
-    smt_declare_function(&imp.head);
-    for (auto predicate : imp.predicates) {
-      smt_declare_function(&predicate);
+  for (auto implication : *implications) {
+    smt_declare_function(&implication.head);
+    for (auto constraint : implication.constraints) {
+      smt_declare_function(constraint);
     }
   }
 }
 
-// Print HeadPredicate
-void smt_print_head_predicate(MyPredicate* predicate) {
-  auto var_size = predicate->vars.size();
-  if (var_size > 0) {
-    output << "(";
-  }
+// Print all constraints from implication
+void smt_print_constraints(std::vector<MyConstraint *> constraints) {
+  auto count = constraints.size();
 
-  output << predicate->name;
-  for (auto v : predicate->vars) {
-    auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-    output << " " << name;
-  }
-  if (var_size > 0) {
-    output << " )";
-  }
-}
-
-// Print UnaryPredicate
-void smt_print_unary_predicate(MyPredicate *predicate) {
-  output << "(= " << predicate->name << " " << predicate->operand1 << " )";
-}
-
-// Print ComparisionPredicate
-void smt_print_comparison_predicate(MyPredicate *predicate) {
-  output << "(" << predicate->sign << " " << predicate->variable.name << " "
-         << predicate->operand2 << " )";
-}
-
-// Print BinaryPredicate
-void smt_print_binary_predicate(MyPredicate *predicate) {
-  if (predicate->sign == "!=") {
-    output << "(= " << predicate->name << " (not (= "
-           << predicate->operand1 << " " << predicate->operand2 << " )))";
-  } else {
-    output << "(= " << predicate->name << " (" << predicate->sign << " "
-           << predicate->operand1 << " " << predicate->operand2 << " ))";
-  }
-}
-
-// Call print for predicate
-void smt_print_predicate(MyPredicate *predicate) {
-  switch (predicate->type) {
-    case BINARY:
-      smt_print_binary_predicate(predicate);
-      return;
-    case UNARY:
-      smt_print_unary_predicate(predicate);
-      return;
-    case COMPARISON:
-      smt_print_comparison_predicate(predicate);
-      return;
-    case HEAD:
-    case FUNCTION:
-      smt_print_head_predicate(predicate);
-      return;
-    case VARIABLE:
-      predicate->Print();
-      return;
-    case UNKNOWN:
-      return;
-  }
-}
-
-// Print all predicates from implication
-void smt_print_predicates(std::vector<MyPredicate> predicates) {
-  auto predicate_size = predicates.size();
-
-  if (predicate_size == 1) {
-      smt_print_predicate(&predicates[0]);
+  if (count == 1) {
+      output << constraints[0]->GetSMT();
   } else {
       output << "(and ";
 
-      for (auto p: predicates) {
-        smt_print_predicate(&p);
+      for (auto p: constraints) {
+        output << p->GetSMT();
         output << " ";
       }
 
@@ -1122,36 +1143,33 @@ void smt_print_predicates(std::vector<MyPredicate> predicates) {
   }
 }
 
-// Print all variables from implication. All variables are in head predicates.
-int smt_quantifiers(Implication *imp, int indent) {
+// Print all variables from predicates in implication
+int smt_quantifiers(Implication *implication, int indent) {
   std::map<std::string, std::string> vars;
 
-  
-  if (imp->head.type == VARIABLE) {
-    vars.insert(
-        std::make_pair(imp->head.variable.name, imp->head.variable.name));
-  } else {
-    // Variables from head of implication
-    for (auto v : imp->head.vars) {
-        if (!v.isConstant) {
-        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-        vars.insert(std::make_pair(name, v.type));
-        }
-    }
+  // Variables from head of implication
+  for (auto v : implication->head.vars) {
+      if (!v.isConstant) {
+      auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+      vars.insert(std::make_pair(name, v.type));
+      }
   }
 
-  // Variables from head predicates from predicates
-  for (auto &p : imp->predicates) {
-    if (p.type == VARIABLE || p.type == COMPARISON) {
-        vars.insert(
-            std::make_pair(p.variable.name, p.variable.name));
-    } else {
-      for (auto &v : p.vars) {
-        if (!v.isConstant) {
-          auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-          vars.insert(std::make_pair(name, v.type));
-        }
+  // Variables in predicates 
+  for (auto &constraint : implication->constraints) {
+    if (MyPredicate *pred = dynamic_cast<MyPredicate *>(constraint)) {
+      for (auto &v : pred->vars) {
+         if (!v.isConstant) {
+            auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+            vars.insert(std::make_pair(name, v.type));
+         }
       }
+    }    
+    else if (LoadConstraint *load = dynamic_cast<LoadConstraint *>(constraint)) {
+      vars.insert(std::make_pair(load->operand1, "Int"));
+    }
+    else if (StoreConstraint *store = dynamic_cast<StoreConstraint *>(constraint)) {
+      vars.insert(std::make_pair(store->name, "Int"));
     }
   }
 
@@ -1175,18 +1193,18 @@ void smt_declare_implication(Implication* implication) {
   // Write all variables used in implication
   indent =smt_quantifiers(implication, indent);
 
-  if (!implication->predicates.empty()) {
+  if (!implication->constraints.empty()) {
     output << std::string(indent++, ' ') << "(=>  " << std::endl;
 
     // Convert predicates
     output << std::string(indent, ' ');
-    smt_print_predicates(implication->predicates);
+    smt_print_constraints(implication->constraints);
     output << std::endl;
   }
   // Convert head of implication
   output << std::string(indent, ' ');
 
-  smt_print_head_predicate(&implication->head);
+  output << implication->head.GetSMT();
   output << std::endl;
   indent--;
 
@@ -1198,8 +1216,8 @@ void smt_declare_implication(Implication* implication) {
 
 // Convert implications
 void smt_declare_implications(std::vector<Implication> *implications) {
-  for (auto imp : *implications) {
-    smt_declare_implication(&imp);
+  for (auto implication : *implications) {
+    smt_declare_implication(&implication);
   }
 }
 
@@ -1223,24 +1241,38 @@ void smt_print_implications(std::vector<Implication> *implications) {
 
 #pragma endregion
 
+// Set global variables into vector at the beginning of pass
+void set_global_variables(Function *F) {
+  auto globals = F->getParent()->globals();
+
+  int j = 0;
+  for (auto &var : globals) {
+
+    if (var.getValueType()->isIntegerTy()) {
+      auto name = "g" + std::to_string(j);
+      var.setName(name);
+
+      global_vars[name] = 0;      
+
+      j++;
+    }    
+  }
+}
+
 PreservedAnalyses CHCTransformPass::run(Function &F,
                                       FunctionAnalysisManager &AM) {
+  
+  if (first_function) {
+    set_global_variables(&F);
+
+    first_function = false;
+  }
 
   auto function_info = load_my_function_info(F);
 
-  auto implications = transform_basic_blocks(&function_info);
-
   //print_info(function_info.basic_blocks);
 
-  if (firstFunction) {
-    auto common_functions = create_common_functions();
-
-    //print_implications(common_functions);
-
-    smt_print_implications(&common_functions);
-    
-    firstFunction = false;
-  }
+  auto implications = transform_basic_blocks(&function_info);
 
   //print_implications(implications);
 
@@ -1248,68 +1280,3 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   return PreservedAnalyses::all();
 }
-
-// extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
-// llvmGetPassPluginInfo() {
-//   return {LLVM_PLUGIN_API_VERSION, "MyFunPass", "v0.1", [](PassBuilder &PB) {
-//             PB.registerPipelineParsingCallback(
-//                 [](StringRef Name, FunctionPassManager &FPM,
-//                    ArrayRef<PassBuilder::PipelineElement>) {
-//                   if (Name == "my-pass") {
-//                     FPM.addPass(CHCTransformPass());
-//                     return true;
-//                   }
-//                   return false;
-//                 });
-//           }};
-// }
-
-
-//llvm::PassPluginLibraryInfo getMyFunctionPassPluginInfo() {
-//  return {LLVM_PLUGIN_API_VERSION, "MyFunctionPass", LLVM_VERSION_STRING,
-//          [](PassBuilder &PB) {
-//            PB.registerPipelineParsingCallback(
-//                [](StringRef Name, FunctionPassManager &FPM,
-//                   ArrayRef<PassBuilder::PipelineElement>) {
-//                  if (Name == "chc-transform") {
-//                    FPM.addPass(CHCTransformPass());
-//                    return true;
-//                  }
-//                  return false;
-//                });
-//          }};
-//}
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
-//llvmGetPassPluginInfo() {
-//  return getMyFunctionPassPluginInfo();
-//}
-
-
-//PassPluginLibraryInfo getPassPluginInfo() {
-//  return {LLVM_PLUGIN_API_VERSION, "CHCPass", LLVM_VERSION_STRING,
-//          [](PassBuilder &PB) {
-//            PB.(
-//                [](FunctionPassManager &PM, OptimizationLevel Level) {
-//                  PM.addPass(CHCTransformPass());
-//                });
-//          }};
-//}
-
-//
-//
-//  const auto callback = [](PassBuilder &PB) {
-//    PB.registerPipelineEarlySimplificationEPCallback(
-//        [&](ModulePassManager &MPM, auto) {
-//          MPM.addPass(PromotePass());
-//          MPM.addPass(CHCTransformPass());
-//          return true;
-//        });
-//  };
-//
-//  return {LLVM_PLUGIN_API_VERSION, "test", "0.0.1", callback};
-//};
-//
-//extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
-//  return getPassPluginInfo();
-//}
