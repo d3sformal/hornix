@@ -1,26 +1,26 @@
-; ModuleID = 'LLVMIRs/example.ll'
-source_filename = "example.cpp"
+; ModuleID = 'LLVMIRs/example3.ll'
+source_filename = "example3.cpp"
 target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-windows-msvc19.38.33134"
 
-$"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
+$"??_C@_1BK@DMHKDEPP@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA3?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
 
-$"??_C@_1BC@GAKNLDO@?$AAr?$AAe?$AAs?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = comdat any
+$"??_C@_1O@HADGPJAD@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = comdat any
 
 $"??_C@_1CE@DHEBGCHN@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA1?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA9?$AA?$AA@" = comdat any
 
-@"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [12 x i16] [i16 101, i16 120, i16 97, i16 109, i16 112, i16 108, i16 101, i16 46, i16 99, i16 112, i16 112, i16 0], comdat, align 2
-@"??_C@_1BC@GAKNLDO@?$AAr?$AAe?$AAs?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [9 x i16] [i16 114, i16 101, i16 115, i16 32, i16 62, i16 61, i16 32, i16 48, i16 0], comdat, align 2
+@"??_C@_1BK@DMHKDEPP@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA3?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [13 x i16] [i16 101, i16 120, i16 97, i16 109, i16 112, i16 108, i16 101, i16 51, i16 46, i16 99, i16 112, i16 112, i16 0], comdat, align 2
+@"??_C@_1O@HADGPJAD@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [7 x i16] [i16 120, i16 32, i16 62, i16 61, i16 32, i16 48, i16 0], comdat, align 2
 @"??_C@_1CE@DHEBGCHN@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA1?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA9?$AA?$AA@" = linkonce_odr dso_local unnamed_addr constant [18 x i16] [i16 120, i16 32, i16 61, i16 61, i16 32, i16 49, i16 48, i16 32, i16 38, i16 38, i16 32, i16 121, i16 32, i16 61, i16 61, i16 32, i16 57, i16 0], comdat, align 2
 
 ; Function Attrs: mustprogress noinline uwtable
 define dso_local noundef i32 @"?bar@@YAHHH@Z"(i32 noundef %0, i32 noundef %1) #0 {
   %3 = sub nsw i32 %0, %1
-  %4 = icmp sge i32 %3, 0
+  %4 = icmp sge i32 %0, 0
   br i1 %4, label %6, label %5
 
 5:                                                ; preds = %2
-  call void @_wassert(ptr noundef @"??_C@_1BC@GAKNLDO@?$AAr?$AAe?$AAs?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 5)
+  call void @_wassert(ptr noundef @"??_C@_1O@HADGPJAD@?$AAx?$AA?5?$AA?$DO?$AA?$DN?$AA?5?$AA0?$AA?$AA@", ptr noundef @"??_C@_1BK@DMHKDEPP@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA3?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 5)
   br label %6
 
 6:                                                ; preds = %5, %2
@@ -39,7 +39,7 @@ define dso_local noundef i32 @main() #2 {
   br i1 %3, label %5, label %4
 
 4:                                                ; preds = %2, %0
-  call void @_wassert(ptr noundef @"??_C@_1CE@DHEBGCHN@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA1?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA9?$AA?$AA@", ptr noundef @"??_C@_1BI@MGCDFEKO@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 13)
+  call void @_wassert(ptr noundef @"??_C@_1CE@DHEBGCHN@?$AAx?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA1?$AA0?$AA?5?$AA?$CG?$AA?$CG?$AA?5?$AAy?$AA?5?$AA?$DN?$AA?$DN?$AA?5?$AA9?$AA?$AA@", ptr noundef @"??_C@_1BK@DMHKDEPP@?$AAe?$AAx?$AAa?$AAm?$AAp?$AAl?$AAe?$AA3?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@", i32 noundef 13)
   br label %5
 
 5:                                                ; preds = %4, %2

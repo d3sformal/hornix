@@ -149,119 +149,120 @@ struct FunctionPredicate : MyPredicate {
   MyPredicateType GetType() override { return FUNCTION; }
 };
 struct ITEConstraint : MyConstraint {
-  std::string name;
+  std::string result;
   std::string operand1;
   std::string operand2;
   std::string condition;
   virtual ~ITEConstraint() {}
-  ITEConstraint(std::string name_, std::string op1, std::string condition_,
-                   std::string op2) {
-    name = name_;
-    operand1 = op1;
+  ITEConstraint(std::string result_, std::string operand1_, std::string condition_,
+                   std::string operand2_) {
+    result = result_;
+    operand1 = operand1_;
     condition = condition_;
-    operand2 = op2;
+    operand2 = operand2_;
   }
   std::string Print() override {
-    return name + "=ite(" + condition + "," + operand1 + "," + operand2 + ")";
+    return result + "=ite(" + condition + "," + operand1 + "," + operand2 + ")";
   }
 
   std::string GetSMT() override 
   {
-    return + "(= " + name + " (ite " + condition + " " + operand1 
+    return + "(= " + result + " (ite " + condition + " " + operand1 
       + " " + operand2 + " ))";
   }
 
   MyPredicateType GetType() override { return ITE; }
 };
 struct BinaryConstraint : MyConstraint {
-  std::string name;
+  std::string result;
   std::string operand1;
   std::string sign;
   std::string operand2;
   virtual ~BinaryConstraint() {}
-  BinaryConstraint(std::string name_, std::string op1, std::string sign_,
-              std::string op2) {
-    name = name_;
-    operand1 = op1;
+  BinaryConstraint(std::string result_, std::string operand1_,
+                   std::string sign_, std::string operand2_) {
+    result = result_;
+    operand1 = operand1_;
     sign = sign_;
-    operand2 = op2;
+    operand2 = operand2_;
   }
   std::string Print() override {
-    return name + " = " + operand1 + " " + sign + " " + operand2;
+    return result + " = " + operand1 + " " + sign + " " + operand2;
   }
 
   std::string GetSMT() override 
   {
     if (sign == "!=") {
-        return "(= " + name + " (not (= " + operand1 + " " + operand2 + " )))";
+        return "(= " + result + " (not (= " + operand1 + " " + operand2 + " )))";
     } else {
-        return "(= " + name + " (" + sign + " " + operand1 + " " + operand2 + " ))";
+        return "(= " + result + " (" + sign + " " + operand1 + " " + operand2 + " ))";
     }  
   }
 
   MyPredicateType GetType() override { return BINARY; }
 };
 struct UnaryConstraint : MyConstraint {
-  std::string name;
-  std::string operand1;
+  std::string result;
+  std::string value;
   virtual ~UnaryConstraint() {}
-  UnaryConstraint(std::string name_, std::string value_) {
-    name = name_;
-    operand1 = value_;
+  UnaryConstraint(std::string result_, std::string value_) {
+    result = result_;
+    value = value_;
   }
-  std::string Print() override { return name + " = " + operand1;
+  std::string Print() override { return result + " = " + value;
   }
 
-  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
+  std::string GetSMT() override { return "(= " + result + " " + value + " )"; }
 
   MyPredicateType GetType() override { return UNARY; }
 };
 struct ComparisonConstraint : MyConstraint {
-  std::string name;
   std::string operand1;
+  std::string operand2;
   std::string sign;
   virtual ~ComparisonConstraint() {}
-  ComparisonConstraint(std::string name_, std::string sign_, std::string op1) {
-    name = name_;
-    operand1 = op1;
+  ComparisonConstraint(std::string operand1_, std::string sign_,
+                       std::string operand2_) {
+    operand1 = operand1_;
+    operand2 = operand2_;
     sign = sign_;
   }
-  std::string Print() override { return name + sign + operand1; }
+  std::string Print() override { return operand1 + sign + operand2; }
   std::string GetSMT() override 
   {
-    return "(" + sign + " " + name + " " + operand1 + " )"; 
+    return "(" + sign + " " + operand1 + " " + operand2 + " )"; 
   }
   MyPredicateType GetType() override { return COMPARISON; }
 };
 struct LoadConstraint : MyConstraint {
-  std::string name;
-  std::string operand1;
+  std::string result;
+  std::string value;
   virtual ~LoadConstraint() {}
   LoadConstraint() {}
   LoadConstraint(std::string name_, std::string value_) {
-    name = name_;
-    operand1 = value_;
+    result = name_;
+    value = value_;
   }
-  std::string Print() override { return name + " = " + operand1;
+  std::string Print() override { return result + " = " + value;
   }
 
-  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
+  std::string GetSMT() override { return "(= " + result + " " + value + " )"; }
 
   MyPredicateType GetType() override { return LOAD; }
 };
 struct StoreConstraint : MyConstraint {
-  std::string name;
-  std::string operand1;
+  std::string result;
+  std::string value;
   virtual ~StoreConstraint() {}
   StoreConstraint() {}
-  StoreConstraint(std::string name_, std::string value_) {
-    name = name_;
-    operand1 = value_;
+  StoreConstraint(std::string result_, std::string value_) {
+    result = result_;
+    value = value_;
   }
-  std::string Print() override { return name + " = " + operand1;
+  std::string Print() override { return result + " = " + value;
   }
 
-  std::string GetSMT() override { return "(= " + name + " " + operand1 + " )"; }
+  std::string GetSMT() override { return "(= " + result + " " + value + " )"; }
 
   MyPredicateType GetType() override { return STORE; }
 };

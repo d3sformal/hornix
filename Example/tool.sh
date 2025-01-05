@@ -28,4 +28,19 @@ opt -disable-output LLVMIRs/$file_name.ll -passes=chc-transform >> smt/$file_nam
 
 echo "(check-sat)" >> smt/$file_name.smt2
 
-z3 -smt2 smt/$file_name.smt2
+# Z3 solver
+RESULT=$(z3 -smt2 smt/$file_name.smt2);
+
+# Eldarica solver
+# RESULT=$(eld smt/$file_name.smt2);
+
+# Golem solver
+# RESULT=$(golem -l QF_LIA smt/$file_name.smt2);
+
+if [ "$RESULT" = "sat" ]; then
+  echo "safe"
+elif [ "$RESULT" = "unsat" ]; then 
+   echo "unsafe"
+else 
+   echo "unknown"
+fi

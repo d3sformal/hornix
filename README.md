@@ -1,7 +1,5 @@
 # CHC-LLVM-pass
 
-
-
 ## **Getting started**
 
 #### Download LLVM
@@ -11,7 +9,6 @@
     `git clone https://github.com/llvm/llvm-project.git`
 
 
-
 #### Add new pass into LLVM
 
 1. Add file `CHCTransform.h` into `llvm-project/llvm/include/llvm/Transforms/Utils/` repository
@@ -19,7 +16,6 @@
 3. Into file`llvm-project/llvm/lib/Passes/PassBuilder.cpp` add new line `#include "llvm/Transforms/Utils/CHCTransform.h"`
 4. Into file `llvm-project/llvm/lib/Passes/PassRegistry.def` add new line `FUNCTION_PASS("chc-transform", CHCTransformPass())`
 5. Into file `llvm-project/llvm/lib/Transforms/Utils/CMakeLists.txt` add `CHCTransform.cpp`
-
 
 
  #### Configure LLVM using CMake
@@ -32,12 +28,9 @@
 3. cmake --build build --target opt
 ```
 
-
-
 ### Official documentation for LLVM start
 
 https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm
-
 
 
 ## **Using pass**
@@ -45,7 +38,6 @@ https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-l
 1. Compile using clang with minimal number of passes: ` clang++ -Xclang -disable-O0-optnone -S -emit-llvm {source code} -o {output file}`
 2. Use pass mem2reg, to move memory allocations to registers.: `opt -S {output file from previous command} -passes=mem2reg -o {output file}`
 3. Use chc-transform pass: `opt -disable-output {output file from previous command} -passes=chc-transform`
-
 
 
 For example, source code file *example.cpp* :
@@ -78,7 +70,7 @@ opt -disable-output example.ll -passes=chc-transform >> example.smt
     * example `./tool.sh example.cpp`
 
 - *test-bench.sh*
-    * to run benchmark, uses chc-trnasform.sh
+    * to run benchmark, uses chc-transform.sh
     * takes directory with files or single yaml file expecting c/cpp/i file in same directory
     * used to run benchmarks and test unreach-call.prp property in yaml file  
     * arguments: 

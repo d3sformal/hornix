@@ -21,6 +21,7 @@ bool first_function = true;
 
 std::string get_type(Type *type);
 std::string convert_name_to_string(Value *BB);
+std::string convert_operand_to_string(Value *value);
 
 #pragma region Create my basic blocks
 // Set name for variable and add to basic block info if not presented
@@ -184,7 +185,8 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
             function_info->return_value =
                 MyVariable(convert_name_to_string(o), get_type(o->getType()));
           } else {
-            function_info->return_value = MyVariable(convert_name_to_string(o));
+            function_info->return_value =
+                MyVariable(convert_operand_to_string(o));
           }
         }
         BB->isLastBlock = true;
@@ -280,6 +282,22 @@ std::string convert_name_to_string(Value *value) {
   return string_stream.str();
 }
 
+// Convert operand to std::string, if negative string, 
+// return as function (-) with positive value (e.g. -100 => (- 100))
+std::string convert_operand_to_string(Value *value) {
+  if (get_type(value->getType()) == "Int") {
+    if (auto asConstant = dyn_cast<ConstantInt>(value)) {
+      auto num = asConstant->getSExtValue();
+      if (num < 0) {
+        return "(- " + std::to_string(num * -1) + ')';
+      }
+      return std::to_string(num);
+    }
+  }
+
+  return convert_name_to_string(value);
+}
+
 // Get type of variable
 std::string get_type(Type *type) {
   if (type->isIntegerTy()) {
@@ -342,12 +360,20 @@ BinaryConstraint * transform_comparison(Instruction *I) {
   // Get constant value as signed or unsigned based on type of comparison
   auto asString = [&](Value* val) -> std::string {
     if (auto asConstant = dyn_cast<ConstantInt>(val)) {
-      auto value = comparison->isSigned() ? asConstant->getSExtValue() : asConstant->getZExtValue();
-      return std::to_string(value);
+      if (comparison->isSigned()) {
+        auto value = asConstant->getSExtValue();
+        if (value < 0) {
+          return "(- " + std::to_string(value * -1) + ')';
+        }
+        return std::to_string(value);
+      } else {
+        auto value = asConstant->getZExtValue();
+        return std::to_string(value);
+      }
     }
     return convert_name_to_string(val);
   };
-
+  
   return new BinaryConstraint(convert_name_to_string(comparison), asString(lhs), sign, asString(rhs));
 }
 
@@ -388,8 +414,8 @@ BinaryConstraint * transform_binary_inst(Instruction *I) {
   }
 
   return new BinaryConstraint(convert_name_to_string(I),
-                         convert_name_to_string(I->getOperand(0)), sign,
-                         convert_name_to_string(I->getOperand(1)));
+                              convert_operand_to_string(I->getOperand(0)), sign,
+                              convert_operand_to_string(I->getOperand(1)));
 }
 
 // Create constraints for function call
@@ -422,7 +448,7 @@ std::vector<MyConstraint *> tranform_function_call(Instruction *I,
                std::string::npos) {
 
       result.push_back(
-          new ComparisonConstraint(convert_name_to_string(I), ">=", "-32768"));
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "(- 32768)"));
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), "<=", "32767"));
 
@@ -445,7 +471,7 @@ std::vector<MyConstraint *> tranform_function_call(Instruction *I,
     } else if (function_name.find(UNSIGNED_CHAR_FUNCTION, 0) != std::string::npos) {
     
       result.push_back(
-          new ComparisonConstraint(convert_name_to_string(I), ">=", "-128"));
+          new ComparisonConstraint(convert_name_to_string(I), ">=", "(- 128)"));
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), "<=", "127"));
     
@@ -468,7 +494,7 @@ std::vector<MyConstraint *> tranform_function_call(Instruction *I,
 
       predicate->vars.push_back(MyVariable(var_name, var_type));
     } else {
-      var_name = convert_name_to_string(arg->get());
+      var_name = convert_operand_to_string(arg->get());
 
       predicate->vars.push_back(MyVariable(var_name));
     }
@@ -561,8 +587,8 @@ MyConstraint* transform_load_operand(Instruction *I) {
   int index = global_vars[global_var_name];
 
   LoadConstraint * con = new LoadConstraint();
-  con->name = convert_name_to_string(I);
-  con->operand1 = global_var_name + "_" + std::to_string(index);
+  con->result = convert_name_to_string(I);
+  con->value = global_var_name + "_" + std::to_string(index);
   
   return con;
 }
@@ -575,8 +601,8 @@ MyConstraint * transform_store_operand(Instruction *I) {
   int index = global_vars[global_var_name];
 
   StoreConstraint *con = new StoreConstraint();
-  con->name = global_var_name + "_" + std::to_string(index);
-  con->operand1 = convert_name_to_string(I->getOperand(0));
+  con->result = global_var_name + "_" + std::to_string(index);
+  con->value = convert_operand_to_string(I->getOperand(0));
 
   return con;
 }
@@ -729,8 +755,8 @@ void initialize_global_variables(Implication *implication,
         ++global_vars[name];
 
         StoreConstraint *store = new StoreConstraint();
-        store->name = name + "_" + std::to_string(global_vars[name]);
-        store->operand1 = convert_name_to_string(var.getInitializer());
+        store->result = name + "_" + std::to_string(global_vars[name]);
+        store->value = convert_operand_to_string(var.getInitializer());
 
         implication->constraints.push_back(store);
       }
@@ -742,8 +768,8 @@ void initialize_global_variables(Implication *implication,
       ++var.second;
 
       StoreConstraint * store = new StoreConstraint();
-      store->name = var.first + "_" + std::to_string(var.second);
-      store->operand1 = var.first;
+      store->result = var.first + "_" + std::to_string(var.second);
+      store->value = var.first;
 
       implication->constraints.push_back(store);
     }
@@ -799,7 +825,7 @@ std::vector<UnaryConstraint *> transform_phi_instructions(MyBasicBlock *predeces
       translation = I.DoPHITranslation(successor->BB_link, predecessor->BB_link);
 
       result.push_back(new UnaryConstraint(convert_name_to_string(&I),
-                       convert_name_to_string(translation)));
+                       convert_operand_to_string(translation)));
     }
   }
   return result;
@@ -863,22 +889,22 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
       }
 
       // Set assigned variable as prime in current constraint and head predicate
-      set_prime_var_in_head(exit_predicate, bc->name);
-      prime_vars.insert(bc->name);
-      bc->name = bc->name + PRIME_SIGN;
+      set_prime_var_in_head(exit_predicate, bc->result);
+      prime_vars.insert(bc->result);
+      bc->result = bc->result + PRIME_SIGN;
     }
 
     else if (UnaryConstraint *uc = dynamic_cast<UnaryConstraint *>(constraint)) {
       
       // Set operands when assigned before
-      if (prime_vars.find(uc->operand1) != prime_vars.end()) {
-        uc->operand1 = uc->operand1 + PRIME_SIGN;
+      if (prime_vars.find(uc->value) != prime_vars.end()) {
+        uc->value = uc->value + PRIME_SIGN;
       }
 
       // Set assigned variable as prime in current constraint and head predicate
-      set_prime_var_in_head(exit_predicate, uc->name);
-      prime_vars.insert(uc->name);
-      uc->name = uc->name + PRIME_SIGN;
+      set_prime_var_in_head(exit_predicate, uc->result);
+      prime_vars.insert(uc->result);
+      uc->result = uc->result + PRIME_SIGN;
     }
 
     else if (ITEConstraint *ite = dynamic_cast<ITEConstraint *>(constraint)) {
@@ -889,24 +915,24 @@ Implication create_entry_to_exit(MyBasicBlock *BB, MyFunctionInfo *function_info
       }
 
       // Set assigned variable as prime in current constraint and head predicate
-      set_prime_var_in_head(exit_predicate, ite->name);
-      prime_vars.insert(ite->name);
-      ite->name = ite->name + PRIME_SIGN;
+      set_prime_var_in_head(exit_predicate, ite->result);
+      prime_vars.insert(ite->result);
+      ite->result = ite->result + PRIME_SIGN;
     } 
     
     else if (LoadConstraint *lc = dynamic_cast<LoadConstraint *>(constraint)) {
 
       // Set assigned variable as prime in current constraint and head predicate
-      set_prime_var_in_head(exit_predicate, lc->name);
-      prime_vars.insert(lc->name);
-      lc->name = lc->name + PRIME_SIGN;
+      set_prime_var_in_head(exit_predicate, lc->result);
+      prime_vars.insert(lc->result);
+      lc->result = lc->result + PRIME_SIGN;
     } 
     
     else if (StoreConstraint *sc = dynamic_cast<StoreConstraint *>(constraint)) {
       
       // Set operand as prime when assigned before
-      if (prime_vars.find(sc->operand1) != prime_vars.end()) {
-        sc->operand1 = sc->operand1 + PRIME_SIGN;
+      if (prime_vars.find(sc->value) != prime_vars.end()) {
+        sc->value = sc->value + PRIME_SIGN;
       }
     }
       
@@ -975,8 +1001,8 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
       if (phi_constraints.size() > 0) {
         // Set prime variables
         for (auto constraint : phi_constraints) { 
-          set_prime_var_in_head(succ_predicate, constraint->name);
-          constraint->name = constraint->name + PRIME_SIGN;
+          set_prime_var_in_head(succ_predicate, constraint->result);
+          constraint->result = constraint->result + PRIME_SIGN;
           implication.constraints.push_back(constraint);          
         }
       }
@@ -985,8 +1011,8 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
       if (BB->last_instruction != nullptr && BB->successors.size() > 0) {
         if (BB->successors.size() == 2) {
           auto br = transform_br(BB->last_instruction, successor->BB_link);
-          if ((br->name == "true" && br->operand1 == "false") ||
-              (br->name == "false" && br->operand1 == "true")) {
+          if ((br->result == "true" && br->value == "false") ||
+              (br->result == "false" && br->value == "true")) {
               continue;
           }
           implication.constraints.push_back(br);
@@ -1083,7 +1109,7 @@ void print_implications(std::vector<Implication> implications)
 #pragma region Print SMT-LIB format
 // Print function declaration
 void smt_declare_function(MyConstraint *predicate) {
-  if (predicate->GetType() == PREDICATE) {
+  if (predicate->GetType() == PREDICATE || predicate->GetType() == FUNCTION) {
     if (MyPredicate *pred = dynamic_cast<MyPredicate *>(predicate)) {
       if (declared_functions.find(pred->name) == declared_functions.end() 
           && pred->name != "true"
@@ -1166,10 +1192,10 @@ int smt_quantifiers(Implication *implication, int indent) {
       }
     }    
     else if (LoadConstraint *load = dynamic_cast<LoadConstraint *>(constraint)) {
-      vars.insert(std::make_pair(load->operand1, "Int"));
+      vars.insert(std::make_pair(load->value, "Int"));
     }
     else if (StoreConstraint *store = dynamic_cast<StoreConstraint *>(constraint)) {
-      vars.insert(std::make_pair(store->name, "Int"));
+      vars.insert(std::make_pair(store->result, "Int"));
     }
   }
 

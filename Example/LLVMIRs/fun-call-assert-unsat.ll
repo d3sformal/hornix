@@ -1,6 +1,6 @@
 ; ModuleID = 'LLVMIRs/fun-call-assert-unsat.ll'
 source_filename = "fun-call-assert-unsat.cpp"
-target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-windows-msvc19.38.33134"
 
 $"??_C@_1DE@BGLFJKBK@?$AAf?$AAu?$AAn?$AA?9?$AAc?$AAa?$AAl?$AAl?$AA?9?$AAa?$AAs?$AAs?$AAe?$AAr?$AAt?$AA?9?$AAu?$AAn?$AAs?$AAa?$AAt?$AA?4?$AAc?$AAp?$AAp?$AA?$AA@" = comdat any
@@ -38,7 +38,6 @@ define dso_local noundef i32 @"?bar@@YAHHH@Z"(i32 noundef %0, i32 noundef %1) #1
   br label %10
 
 10:                                               ; preds = %9, %7
-  %11 = phi i1 [ true, %7 ], [ false, %9 ]
   ret i32 %3
 }
 
@@ -61,7 +60,6 @@ define dso_local noundef i32 @main() #3 {
   br label %8
 
 8:                                                ; preds = %7, %5
-  %9 = phi i1 [ true, %5 ], [ false, %7 ]
   ret i32 0
 }
 
@@ -77,4 +75,4 @@ attributes #3 = { mustprogress noinline norecurse uwtable "min-legal-vector-widt
 !1 = !{i32 8, !"PIC Level", i32 2}
 !2 = !{i32 7, !"uwtable", i32 2}
 !3 = !{i32 1, !"MaxTLSAlign", i32 65536}
-!4 = !{!"clang version 17.0.1"}
+!4 = !{!"clang version 18.1.8 (https://github.com/llvm/llvm-project.git 4ec508cc867ae77acbb67775609d09e67e0fbb12)"}

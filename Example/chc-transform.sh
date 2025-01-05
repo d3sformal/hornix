@@ -48,4 +48,19 @@ fi
 
 echo "(check-sat)" >> $dir_name/$file_name.smt2
 
-z3 -smt2 $dir_name/$file_name.smt2
+# Z3 solver
+RESULT=$(z3 -smt2 $dir_name/$file_name.smt2);
+
+# Eldarica solver
+# RESULT=$(eld $dir_name/$file_name.smt2);
+
+# Golem solver
+# RESULT=$(golem -l QF_LIA $dir_name/$file_name.smt2);
+
+if [ "$RESULT" = "sat" ]; then
+  echo "safe"
+elif [ "$RESULT" = "unsat" ]; then 
+  echo "unsafe"
+else 
+  echo "unknown"
+fi

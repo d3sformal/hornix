@@ -12,7 +12,7 @@ dir="$(dirname $files)/"
 
 mkdir -p $dir_name
 
-if [[ "$files" =~ "*" ]]; then 
+if [[ "$files" != "*" ]]; then 
    files=$(echo "${files%%\**}*.yml")
 else 
    files=$(echo "${files}") 
@@ -22,19 +22,19 @@ for f in $files;
  do 
  file_name=$(basename $f .yml)
  expected=$(sed -n '/unreach-call.prp/ {n;p}' $f)
- if [[ "$expected" =~ "true" ]]; then
-    exp_res="sat"
- elif [[ "$expected" =~ "false" ]]; then
-    exp_res="unsat"
+ if [[ "$expected" == *"true" ]]; then
+    exp_res="safe"
+ elif [[ "$expected" == *"false" ]]; then
+    exp_res="unsafe"
  else
     echo "$file_name; ERROR - no unreach"
     continue 1
  fi
 
- if [ -f $dir$file_name.c ]; then 
-   run_file=$dir$file_name.c
- elif [ -f $dir$file_name.i ]; then
-   run_file=$dir$file_name.i
+ if [ -f $1$file_name.c ]; then 
+   run_file=$1$file_name.c
+ elif [ -f $1$file_name.i ]; then
+   run_file=$1$file_name.i
  else 
    echo "$file_name no .c or .i file"
    continue 1
@@ -46,17 +46,17 @@ for f in $files;
     continue 1
  fi
 
- if [ "$RESULT" = "sat" ]; then
+ if [ "$RESULT" = "safe" ]; then
     if [ "$RESULT" = "$exp_res" ]; then
-        echo "$file_name; OK-sat"
+        echo "$file_name; OK-safe"
     else
-        echo "$file_name; BAD-sat" 
+        echo "$file_name; BAD-safe" 
     fi
- elif [ "$RESULT" = "unsat" ]; then 
+ elif [ "$RESULT" = "unsafe" ]; then 
     if [ "$RESULT" = "$exp_res" ]; then
-        echo "$file_name; OK-unsat"
+        echo "$file_name; OK-unsafe"
     else
-        echo "$file_name; BAD-unsat" 
+        echo "$file_name; BAD-unsafe" 
     fi
  elif [ "$RESULT" = "error" ]; then 
     echo "$file_name; ERROR"

@@ -1,70 +1,72 @@
 Ackermann01-2; OK-sat
 Ackermann02; OK-unsat
-Ackermann03; TOO LONG
+Ackermann03; OK-sat
 Ackermann04; OK-sat
 Addition01-2; OK-sat
-Addition02; OK-unsat
 Addition02WithOverflowBug; ERROR - no unreach
-Addition03-1; TOO LONG
+Addition02; OK-unsat
+Addition03-1; OK-sat
 Addition03-2; ERROR - no unreach
-BallRajamani-SPIN2000-Fig1; ERROR
-EvenOdd01-1; unknown
-EvenOdd03; unknown
+BallRajamani-SPIN2000-Fig1; OK-unsat
+EvenOdd01-1; OK-sat
 EvenOdd03WithOverflowBug; ERROR - no unreach
-Fibonacci01-1; unknown
-Fibonacci02; TOO LONG
+EvenOdd03; OK-unsat
+Fibonacci01-1; OK-sat
+Fibonacci02; OK-sat
 Fibonacci03; OK-sat
+Fibonacci04-overflow; ERROR - no unreach
 Fibonacci04; OK-unsat
+Fibonacci05-overflow; ERROR - no unreach
 Fibonacci05; OK-unsat
+gcd01-1; OK-sat
+gcd02; TOO LONG
 McCarthy91-1; OK-unsat
 McCarthy91-2; OK-sat
 MultCommutative-2; TOO LONG
-Primes; TOO LONG
-gcd01-1; OK-sat
-gcd02; TOO LONG
-recHanoi01; ERROR
+Primes; OK-sat
+recHanoi01; TOO LONG
 recHanoi02-2; OK-sat
 recHanoi03-2; OK-sat
-afterrec-1; unknown
-afterrec-2; unknown
-afterrec_2calls-1; unknown
-afterrec_2calls-2; unknown
+afterrec-1; OK-unsat
+afterrec_2calls-1; OK-unsat
+afterrec_2calls-2; OK-sat
+afterrec-2; OK-sat
 fibo_10-1; OK-unsat
-fibo_10-2; TOO LONG
-fibo_15-1; TOO LONG
-fibo_15-2; TOO LONG
-fibo_20-1; TOO LONG
-fibo_20-2; TOO LONG
-fibo_25-1; TOO LONG
-fibo_25-2; TOO LONG
-fibo_2calls_10-1; TOO LONG
+fibo_10-2; OK-sat
+fibo_15-1; OK-sat
+fibo_15-2; OK-unsat
+fibo_20-1; OK-unsat
+fibo_20-2; OK-sat
+fibo_25-1; OK-unsat
+fibo_25-2; OK-sat
+fibo_2calls_10-1; OK-sat
 fibo_2calls_10-2; OK-unsat
-fibo_2calls_15-1; TOO LONG
-fibo_2calls_15-2; TOO LONG
+fibo_2calls_15-1; OK-unsat
+fibo_2calls_15-2; OK-sat
+fibo_2calls_20-1; OK-unsat
+fibo_2calls_20-2; OK-sat
 fibo_2calls_2-1; OK-unsat
-fibo_2calls_2-2; TOO LONG
-fibo_2calls_20-1; TOO LONG
-fibo_2calls_20-2; TOO LONG
-fibo_2calls_25-1; TOO LONG
-fibo_2calls_25-2; TOO LONG
-fibo_2calls_4-1; TOO LONG
+fibo_2calls_2-2; OK-sat
+fibo_2calls_25-1; OK-unsat
+fibo_2calls_25-2; OK-sat
+fibo_2calls_4-1; OK-sat
 fibo_2calls_4-2; OK-unsat
-fibo_2calls_5-1; TOO LONG
+fibo_2calls_5-1; OK-sat
 fibo_2calls_5-2; OK-unsat
-fibo_2calls_6-1; TOO LONG
+fibo_2calls_6-1; OK-sat
 fibo_2calls_6-2; OK-unsat
-fibo_2calls_8-1; TOO LONG
+fibo_2calls_8-1; OK-sat
 fibo_2calls_8-2; OK-unsat
-fibo_5-1; TOO LONG
+fibo_5-1; OK-sat
 fibo_5-2; OK-unsat
-fibo_7-1; TOO LONG
+fibo_7-1; OK-sat
 fibo_7-2; OK-unsat
 id2_b2_o3; OK-sat
 id2_b3_o2; OK-unsat
 id2_b3_o5; OK-sat
 id2_b5_o10; OK-sat
 id2_i5_o5-1; OK-unsat
-id2_i5_o5-2; TOO LONG
+id2_i5_o5-2; OK-sat
 id_b2_o3; OK-sat
 id_b3_o2-1; ERROR - no unreach
 id_b3_o2-2; OK-unsat
@@ -82,11 +84,11 @@ id_i25_o25-1; OK-sat
 id_i25_o25-2; OK-unsat
 id_i5_o5-1; OK-unsat
 id_i5_o5-2; OK-sat
-id_o10; OK-unsat
-id_o100; TOO LONG
 id_o1000; TOO LONG
-id_o20; OK-unsat
+id_o100; OK-unsat
+id_o10; OK-unsat
 id_o200; TOO LONG
+id_o20; OK-unsat
 id_o3; OK-unsat
 sum_10x0-1; OK-sat
 sum_10x0-2; OK-unsat
@@ -98,19 +100,12 @@ sum_25x0-1; OK-sat
 sum_25x0-2; OK-unsat
 sum_2x3-1; OK-unsat
 sum_2x3-2; OK-sat
-sum_non; ERROR - no unreach
 sum_non_eq-1; ERROR - no unreach
 sum_non_eq-2; OK-sat
 sum_non_eq-3; OK-unsat
+sum_non; ERROR - no unreach
 simple-recursive; ERROR
 system-with-recursion; ERROR - no unreach
-prefixsum_rec; ERROR
-tree_del_rec; ERROR
-tree_del_rec_incorrect; ERROR
-tree_max; ERROR
-tree_max_incorrect; ERROR
-elimination_max_rec; ERROR
-elimination_max_rec_onepoint; ERROR
 recursified_simple_array_index_value_1-1; ERROR - no unreach
 recursified_simple_array_index_value_1-2; ERROR - no unreach
 recursified_simple_array_index_value_2; ERROR - no unreach
@@ -130,8 +125,8 @@ recursified_linear-inequality-inv-b; ERROR - no unreach
 recursified_mod4; ERROR - no unreach
 recursified_odd; ERROR - no unreach
 recursified_deep-nested; ERROR - no unreach
-recursified_nested_1; ERROR - no unreach
 recursified_nested_1b; ERROR - no unreach
+recursified_nested_1; ERROR - no unreach
 recursified_nested_2; ERROR - no unreach
 recursified_nested_3; ERROR - no unreach
 recursified_nested_4; ERROR - no unreach
@@ -145,33 +140,33 @@ recursified_cohendiv-ll; ERROR
 recursified_cohendiv; ERROR - no unreach
 recursified_dijkstra-u; ERROR
 recursified_dijkstra; ERROR - no unreach
-recursified_divbin; ERROR
 recursified_divbin2; ERROR
-recursified_egcd-ll; ERROR
-recursified_egcd; ERROR - no unreach
+recursified_divbin; ERROR
 recursified_egcd2-ll; ERROR
 recursified_egcd2; ERROR - no unreach
 recursified_egcd3-ll; ERROR
 recursified_egcd3; ERROR - no unreach
+recursified_egcd-ll; ERROR
+recursified_egcd; ERROR - no unreach
 recursified_fermat1-ll; ERROR
 recursified_fermat1; ERROR - no unreach
 recursified_fermat2-ll; ERROR
 recursified_fermat2; ERROR - no unreach
-recursified_geo1-ll; ERROR
 recursified_geo1-ll2; ERROR - no unreach
-recursified_geo1-u; ERROR
+recursified_geo1-ll; ERROR
 recursified_geo1-u2; ERROR - no unreach
+recursified_geo1-u; ERROR
 recursified_geo1; ERROR - no unreach
-recursified_geo2-ll; ERROR
 recursified_geo2-ll2; ERROR - no unreach
+recursified_geo2-ll; ERROR
 recursified_geo2; ERROR - no unreach
-recursified_geo3-ll; ERROR
 recursified_geo3-ll2; ERROR - no unreach
+recursified_geo3-ll; ERROR
 recursified_geo3; ERROR - no unreach
+recursified_hard2; ERROR
 recursified_hard-ll; ERROR
 recursified_hard-u; ERROR
 recursified_hard; ERROR - no unreach
-recursified_hard2; ERROR
 recursified_knuth; ERROR
 recursified_lcm1; ERROR
 recursified_lcm2; ERROR
