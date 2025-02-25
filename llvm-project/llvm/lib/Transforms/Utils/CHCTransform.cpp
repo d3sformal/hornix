@@ -776,39 +776,6 @@ void initialize_global_variables(Implication *implication,
   }
 }
 
-// Add predicates for global variables initialized values
-void initialize_global_variables(Implication *implication,
-                                                     MyFunctionInfo * function_info) {
-  if (function_info->is_main_function) {
-    auto globals = function_info->function_pointer->getParent()->globals();
-
-    for (auto &var : globals) {
-      if (var.getValueType()->isIntegerTy()) {
-        auto name = var.getName().str();
-        ++global_vars[name];
-
-        MyPredicate store;
-        store.type = STORE;
-        store.name = name + "_" + std::to_string(global_vars[name]);
-        store.operand1 = convert_name_to_string(var.getInitializer());
-
-        implication->predicates.push_back(store);
-      }
-    }
-  } else {
-    for (auto &var : global_vars) {
-      ++var.second;
-
-      MyPredicate store;
-      store.type = STORE;
-      store.name = var.first + "_" + std::to_string(var.second);
-      store.operand1 = var.first;
-
-      implication->predicates.push_back(store);
-    }
-  }
-}
-
 // Create first implication for function input and transfer to BB1
 std::vector<Implication> get_entry_block_implications(MyFunctionInfo* function_info, MyBasicBlock * BB1) {
 
@@ -1014,8 +981,6 @@ transform_basic_blocks(MyFunctionInfo* function_info) {
       auto current_exit_predicate =
           get_basic_block_predicate(BB, false, function_info);
       add_global_variables(current_exit_predicate, function_info);
-
-      add_global_variables(&current_exit_predicate, function_info);
 
       auto successor = &function_info->basic_blocks[succ];
       auto succ_predicate = get_basic_block_predicate(successor, true, function_info);
@@ -1231,12 +1196,6 @@ int smt_quantifiers(Implication *implication, int indent) {
     }
     else if (StoreConstraint *store = dynamic_cast<StoreConstraint *>(constraint)) {
       vars.insert(std::make_pair(store->result, "Int"));
-    }
-    if (p.type == LOAD) {
-      vars.insert(std::make_pair(p.operand1, "Int"));
-    }
-    if (p.type == STORE) {
-      vars.insert(std::make_pair(p.name, "Int"));
     }
   }
 
