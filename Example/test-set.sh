@@ -13,6 +13,6 @@ while read line; do
    continue 1
   else
    repo=$(echo "${line%%/*}")
-   ./test-bench.sh "sv-benchmarks/c/$line" $timeout
+   ./test-bench.sh "sv-benchmarks/c/$repo/" $timeout
   fi
 done < $file
