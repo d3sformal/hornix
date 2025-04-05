@@ -149,6 +149,15 @@ void set_basic_block_info(MyFunctionInfo *function_info) {
       }
     }
 
+    // if no predecessor, take is the first block and add parameters to variables
+    if (predecessors(block_link).empty()) {
+      Function *F = function_info->function_pointer;
+      // Load arguments as variables
+      for (auto arg = F->arg_begin(); arg != F->arg_end(); ++arg) {
+        add_variable(arg, BB);
+      }
+    }
+
     // Set successors of block
     for (auto succ : successors(block_link)) {
       BB->successors.push_back(
@@ -436,25 +445,21 @@ std::vector<MyConstraint *> tranform_function_call(Instruction *I,
     function_name = convert_name_to_string(I->getOperand(0));
   }
   
-  // If function no declared, check name for predefined non-deterministic functions
+  // If function not declared, check name for predefined non-deterministic functions
   if (!fn || fn->isDeclaration()) {
     if (function_name.find(UNSIGNED_UINT_FUNCTION, 0) != std::string::npos) {
       
       result.push_back(new ComparisonConstraint(convert_name_to_string(I), ">=", "0"));
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), "<=", "4294967295"));     
-    
     } else if (function_name.find(UNSIGNED_SHORT_FUNCTION, 0) !=
                std::string::npos) {
-
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), ">=", "(- 32768)"));
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), "<=", "32767"));
-
     } else if (function_name.find(UNSIGNED_USHORT_FUNCTION, 0) !=
                std::string::npos) {
-
       result.push_back(
           new ComparisonConstraint(convert_name_to_string(I), ">=", "0"));
       result.push_back(
@@ -1300,7 +1305,7 @@ PreservedAnalyses CHCTransformPass::run(Function &F,
 
   auto implications = transform_basic_blocks(&function_info);
 
-  //print_implications(implications);
+  // print_implications(implications);
 
   smt_print_implications(&implications);
 

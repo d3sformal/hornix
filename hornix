@@ -1,0 +1,58 @@
+#!/bin/bash
+
+############################################################
+### This is the launching script for the Hornix verifier ###
+###     This tool is licensed under the MIT License.     ###
+###                                                      ###
+###   This tools is based on other tools with various    ###
+###      licenses, please refer to the LICENSE file.     ###
+############################################################
+
+
+VERSION="0.1.0"
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+#echo $DIR
+
+if [ "$#" -ne 1 ]; then
+    echo "Usage: hornix [--version | inputfile(.c|.cpp)]"
+    exit 1
+fi
+
+fullname="$1"
+
+if [ "$fullname" == "--version" ]; then
+    echo "Hornix $VERSION"
+    exit 0
+fi
+
+# Extracting the file extension
+extension="${fullname##*.}"
+
+# Checking if the extension is "cpp" or "c"
+if [ "$extension" = "cpp" ]; then
+  filename=$(basename $fullname .cpp)
+
+elif [ "$extension" = "c" ]; then
+  filename=$(basename $fullname .c)
+elif [ "$extension" = "i" ]; then
+  filename=$(basename $fullname .i)
+else
+  echo "$fullname is neither a C++ nor a C file."
+  exit
+fi
+
+echo "(set-logic HORN)" > $filename.smt2
+
+$DIR/bin/clang-18 -Xclang -disable-O0-optnone -S -emit-llvm $fullname -o $filename.ll 2>/dev/null
+if [[ ! -e "${filename}.ll" || ! -s "${filename}.ll" ]]; then
+  echo "UNKNOWN: Error during initial compilation"
+  exit 1
+fi
+$DIR/bin/opt -passes=mem2reg,instsimplify -S $filename.ll -o $filename.ll
+$($DIR/bin/opt -disable-output $filename.ll -passes=chc-transform >> $filename.smt2 2>/dev/null) || { echo  "UNKNOWN: Error during translation to CHC!"; exit 1; }
+
+echo "(check-sat)" >> $filename.smt2
+PATH="${DIR}/bin":${PATH}
+$DIR/bin/run-chc.py $filename.smt2 $fullname

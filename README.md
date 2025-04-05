@@ -1,4 +1,4 @@
-# CHC-LLVM-pass
+# Hornix
 
 ## **Getting started**
 
