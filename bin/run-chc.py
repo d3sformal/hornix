@@ -97,26 +97,6 @@ WITNESS_TEMPLATE_V1 = '''\
 '''
 
 
-
-def run_z3(input_file, timeout = 900):
-    # timeout in seconds, default 15 minutes
-    #print ('running z3')
-    return subprocess.run(['/usr/bin/z3', f"-T:{timeout}", input_file], capture_output=True, text=True)
-
-def run_golem(input_file, engine = 'spacer', timeout = 900):
-    # timeout in seconds, default 15 minutes
-    try:
-        #return subprocess.run(['golem', "--engine", engine, "--print-witness", "-i", input_file], capture_output=True, text=True, timeout=timeout)
-        return subprocess.run(['golem', "--engine", engine, "-i", input_file], capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        return subprocess.CompletedProcess(
-            args=e.cmd,                  # Original command
-            returncode=None,             # No return code since it timed out
-            stdout=e.stdout,             # Partial output before timeout
-            stderr=e.stderr              # Partial error output, if any
-        )
-
-
 def create_witness_v1(witness_type):
     global uuid
 
@@ -153,6 +133,8 @@ def create_witness_v2():
 
     with open(output_file, 'wt') as f:
         f.write(OUTPUT_TEMPLATE.format(INPUT_FILE=input_cfile, UUID=uuid, SHA256SUM=sha256, CREATION_TIME=str(datetime.datetime.now().isoformat(timespec='seconds'))))
+
+
 
 def run_z3(input_file, timeout = 900):
     # timeout in seconds, default 15 minutes
