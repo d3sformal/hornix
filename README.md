@@ -93,6 +93,6 @@ opt -disable-output example.ll -passes=chc-transform >> example.smt
 
 To properly run the script you to build or download software
 
-1. clang version 18.1.8
+1. clang version 19.1.7
 2. opt from LLVM with chc-transform pass built
 3. z3 solver
