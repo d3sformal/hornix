@@ -276,9 +276,9 @@ struct Implication {
   Constraints constraints;
   MyPredicate head;
 
-  Implication(MyPredicate head_) {
-    head = head_;
-  }
+  explicit Implication(MyPredicate head_) : head(std::move(head_)) {}
+  Implication(MyPredicate head_, Constraints constraints_)
+    : head(std::move(head_)), constraints(std::move(constraints_)) {}
 
   Implication(Implication && other) = default;
   Implication(Implication const & other) = delete;
@@ -287,19 +287,19 @@ struct Implication {
 
 struct MyBasicBlock {
   // Reference to basic block
-  llvm::BasicBlock *BB_link;
+  llvm::BasicBlock const * BB_link;
   // Name of basic block
   std::string name;
   // Id of basic block
   std::uint8_t id;
   // List of references to variables used in instructions of basic block and its predecessors
-  std::unordered_set<llvm::Value *> vars;
+  std::unordered_set<llvm::Value const *> vars;
   // List of ids of predecessors of basic block
   std::vector<std::uint8_t> predecessors;
   // List of ids of successors of basic block
   std::vector<std::uint8_t> successors;
   // Reference to last br instruction of basic block
-  llvm::Instruction * last_instruction;
+  llvm::Instruction const * last_instruction;
   // True if block calls assert function and fails
   bool isFalseBlock;
   // True if it contains return instruction
@@ -307,24 +307,8 @@ struct MyBasicBlock {
   // True if there is call instruction in basic block
   bool isFunctionCalled;
 
-  MyBasicBlock(llvm::BasicBlock* BB_link_, std::string name_, std::uint8_t id_) {
-    BB_link = BB_link_;
-    name = name_;
-    id = id_;
-    last_instruction = nullptr;
-    isFalseBlock = false;
-    isLastBlock = false;
-    isFunctionCalled = false;
-  }
-
-  MyBasicBlock() {
-    BB_link = NULL;
-    id = 0;
-    isFalseBlock = false;
-    isLastBlock = false;
-    last_instruction = NULL;
-    isFunctionCalled = false;
-  }
+  MyBasicBlock(llvm::BasicBlock const * BB_link_, std::string name_, std::uint8_t const id_)
+    : BB_link(BB_link_), name(std::move(name_)), id(id_), last_instruction(nullptr), isFalseBlock(false), isLastBlock(false), isFunctionCalled(false) {}
 };
 
 struct MyFunctionInfo {
@@ -350,14 +334,14 @@ inline bool isMainFunction(std::string const & function_name) {
   return MAIN_FUNCTIONS.find(function_name) != MAIN_FUNCTIONS.end();
 }
 
-inline bool isFailedAssertCall(llvm::Instruction * I) {
+inline bool isFailedAssertCall(llvm::Instruction const & I) {
 
-  if (llvm::CallInst * call_inst = llvm::dyn_cast<llvm::CallInst>(I)) {
+  if (llvm::CallInst const * call_inst = llvm::dyn_cast<llvm::CallInst>(&I)) {
 
     llvm::Function * fn = call_inst->getCalledFunction();
     if (fn) {
       auto function_name = fn->getName().str();
-      for (auto assert : ASSERT_FUNCTIONS) {
+      for (auto const & assert : ASSERT_FUNCTIONS) {
         // Platforms transforms function name differently,
         // check function name also as substring or added
         // '?' at the beginning

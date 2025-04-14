@@ -29,29 +29,28 @@ private:
 
     void add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info);
 
-    void initialize_global_variables(Implication & implication, MyFunctionInfo const & function_info);
+    Implication::Constraints initialize_global_variables(MyFunctionInfo const & function_info);
 
-    void add_variable(Value * var, MyBasicBlock * my_block);
+    void add_variable(Value const * var, MyBasicBlock & my_block);
 
     void set_basic_block_info(MyFunctionInfo * function_info);
 
     MyFunctionInfo load_my_function_info(Function & F);
 
-    Implication::Constraints transform_function_call(Instruction * I, MyFunctionInfo & function_info);
+    Implication::Constraints transform_function_call(Instruction const * I, MyFunctionInfo & function_info);
 
     std::vector<Implication> transform_basic_blocks(MyFunctionInfo & function_info);
 
     Implication::Constraints transform_instructions(MyBasicBlock const & BB, MyFunctionInfo & function_info);
 
-    std::unique_ptr<LoadConstraint> transform_load_operand(Instruction * I);
+    std::unique_ptr<LoadConstraint> transform_load_operand(Instruction const * I);
 
-    std::unique_ptr<StoreConstraint> transform_store_operand(Instruction * I);
+    std::unique_ptr<StoreConstraint> transform_store_operand(Instruction const * I);
 
     std::vector<std::unique_ptr<UnaryConstraint>> transform_phi_instructions(MyBasicBlock const & predecessor,
                                                                              MyBasicBlock const & successor);
 
-    std::vector<Implication> get_entry_block_implications(MyFunctionInfo const & function_info,
-                                                          MyBasicBlock const & BB1);
+    Implication get_entry_block_implications(MyFunctionInfo const & function_info, MyBasicBlock const & BB1);
 
     MyPredicate create_basic_block_predicate(MyBasicBlock const & BB, bool isEntry,
                                              MyFunctionInfo const & function_info);
@@ -107,17 +106,14 @@ MyFunctionInfo load_basic_info(Function & F) {
     return function_info;
 }
 
-// FIXME: Do not change names of the basic block
-MyFunctionInfo::BasicBlocks load_basic_blocks(Function & F) {
+MyFunctionInfo::BasicBlocks load_basic_blocks(Function const & F) {
     MyFunctionInfo::BasicBlocks basic_blocks;
     unsigned bb_index = 1;
     std::string const function_name = F.getName().str();
 
-    for (BasicBlock & BB : F) {
+    for (BasicBlock const & BB : F) {
         auto name = function_name + std::to_string(bb_index);
-        BB.setName(name);
-
-        MyBasicBlock myBB(&BB, name, bb_index);
+        MyBasicBlock myBB(&BB, std::move(name), bb_index);
         basic_blocks.insert(std::make_pair(bb_index, myBB));
         ++bb_index;
     }
@@ -149,7 +145,7 @@ void set_prime_var_in_head(MyPredicate & head_predicate, std::string const & var
 }
 
 // Get type of variable
-std::string get_type(Type * type) {
+std::string get_type(Type const * type) {
     if (type->isIntegerTy()) {
         auto w = cast<IntegerType>(type)->getBitWidth();
         return w == 1 ? "Bool" : "Int";
@@ -181,7 +177,7 @@ std::string convert_operand_to_string(Value const * value) {
 }
 
 // Create constraint for br instruction
-std::unique_ptr<UnaryConstraint> transform_br(Instruction * I, BasicBlock * successor) {
+std::unique_ptr<UnaryConstraint> transform_br(Instruction const * I, BasicBlock const * successor) {
     // Instruction must have 3 operands to jump
     if (I->getNumOperands() != 3) { throw std::logic_error("Wrong instruction. Too few function operands."); }
 
@@ -209,8 +205,8 @@ MyFunctionInfo Context::load_my_function_info(Function & F) {
 
 std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & function_info) {
 
-    std::vector<Implication> result;
-    result = get_entry_block_implications(function_info, function_info.basic_blocks.at(1));
+    std::vector<Implication> clauses;
+    clauses.push_back(get_entry_block_implications(function_info, function_info.basic_blocks.at(1)));
 
     for (auto const & entry : function_info.basic_blocks) {
         MyBasicBlock const & BB = entry.second;
@@ -219,7 +215,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
         if (BB.isFalseBlock) { continue; }
 
         // Create implication of current basic block (entry -> exit)
-        result.push_back(create_entry_to_exit(BB, function_info));
+        clauses.push_back(create_entry_to_exit(BB, function_info));
 
         // Create implications for transfers to successors
         for (auto & succ : BB.successors) {
@@ -261,7 +257,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
             if (not successor.isFalseBlock) { add_global_variables(succ_predicate, function_info); }
             implication.head = succ_predicate;
-            result.push_back(std::move(implication));
+            clauses.push_back(std::move(implication));
         }
 
         // Add predicate if error in called function
@@ -274,7 +270,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             current_exit_predicate.vars.push_back(MyVariable("true"));
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
-            result.push_back(std::move(implication));
+            clauses.push_back(std::move(implication));
         }
 
         // From return instruction to function predicate implication
@@ -288,7 +284,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             if (BB.isFunctionCalled) { current_exit_predicate.vars.push_back(MyVariable("false")); }
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
-            result.push_back(std::move(implication));
+            clauses.push_back(std::move(implication));
         }
     }
 
@@ -297,13 +293,13 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
         Implication implication = Implication(MyPredicate("false"));
         MyPredicate fail_predicate = get_fail_block_predicate(function_info);
         implication.constraints.push_back(std::make_unique<MyPredicate>(fail_predicate));
-        result.push_back(std::move(implication));
+        clauses.push_back(std::move(implication));
     } else {
         auto function_predicate = get_function_predicate(function_info, MyVariable("true"), MyVariable("true"));
-        result.emplace_back(function_predicate);
+        clauses.emplace_back(function_predicate);
     }
 
-    return result;
+    return clauses;
 }
 
 // Add global variables to basic block predicate
@@ -318,7 +314,8 @@ void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const
 }
 
 // Add constraints for global variables initialized values
-void Context::initialize_global_variables(Implication & implication, MyFunctionInfo const & function_info) {
+Implication::Constraints Context::initialize_global_variables(MyFunctionInfo const & function_info) {
+    Implication::Constraints constraints;
     if (function_info.is_main_function) {
         // Main function takes initial values of variable
         auto globals = function_info.llvm_function.getParent()->globals();
@@ -330,7 +327,7 @@ void Context::initialize_global_variables(Implication & implication, MyFunctionI
 
                 auto result = name + "_" + std::to_string(global_vars[name]);
                 auto value = convert_operand_to_string(var.getInitializer());
-                implication.constraints.push_back(std::make_unique<StoreConstraint>(result, value));
+                constraints.push_back(std::make_unique<StoreConstraint>(result, value));
             }
         }
     } else {
@@ -341,10 +338,10 @@ void Context::initialize_global_variables(Implication & implication, MyFunctionI
 
             auto result = var.first + "_" + std::to_string(var.second);
             auto value = var.first;
-
-            implication.constraints.push_back(std::make_unique<StoreConstraint>(result, value));
+            constraints.push_back(std::make_unique<StoreConstraint>(result, value));
         }
     }
+    return constraints;
 }
 
 // Create implication from entry to exit point in basic block
@@ -433,8 +430,8 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
 
 void Context::set_basic_block_info(MyFunctionInfo * function_info) {
     for (auto & it : function_info->basic_blocks) {
-        MyBasicBlock * BB = &it.second;
-        BasicBlock * block_link = BB->BB_link;
+        MyBasicBlock & BB = it.second;
+        BasicBlock const * block_link = BB.BB_link;
 
         // Set Predecessors of blocks and variables from them
         for (auto pred : predecessors(block_link)) {
@@ -443,10 +440,10 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
             if (maybe_pred_id.has_value()) {
                 auto pred_id = maybe_pred_id.value();
                 // Add predecessor
-                BB->predecessors.push_back(pred_id);
+                BB.predecessors.push_back(pred_id);
 
                 // Add new variables from predecessor
-                for (auto v : function_info->basic_blocks[pred_id].vars) {
+                for (auto v : function_info->basic_blocks.at(pred_id).vars) {
                     add_variable(v, BB);
                 }
             }
@@ -465,26 +462,26 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
         for (auto succ : successors(block_link)) {
             auto maybe_succ_id = get_block_id_by_link(succ, function_info->basic_blocks);
             assert(maybe_succ_id.has_value());
-            BB->successors.push_back(maybe_succ_id.value());
+            BB.successors.push_back(maybe_succ_id.value());
         }
 
         // Find all used variables in instructions
-        for (Instruction & I : block_link->instructionsWithoutDebug()) {
+        for (Instruction const & I : block_link->instructionsWithoutDebug()) {
 
             // See if basic block handles failed assertion
-            if (isFailedAssertCall(&I)) {
-                BB->isFalseBlock = true;
+            if (isFailedAssertCall(I)) {
+                BB.isFalseBlock = true;
                 break;
             }
 
             // Remember function called in basic block (no assert)
             if (I.getOpcode() == Instruction::Call) {
                 auto fn = dyn_cast<CallInst>(&I)->getCalledFunction();
-                if (fn && !fn->isDeclaration()) { BB->isFunctionCalled = true; }
+                if (fn && !fn->isDeclaration()) { BB.isFunctionCalled = true; }
             }
 
             // Remember last br instruction (should be only one)
-            if (I.getOpcode() == Instruction::Br) { BB->last_instruction = &I; }
+            if (I.getOpcode() == Instruction::Br) { BB.last_instruction = &I; }
 
             // Remember return value of function
             if (I.getOpcode() == Instruction::Ret) {
@@ -496,7 +493,7 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
                         function_info->return_value = MyVariable(convert_operand_to_string(o));
                     }
                 }
-                BB->isLastBlock = true;
+                BB.isLastBlock = true;
             }
 
             // Add instructions returning void
@@ -511,22 +508,21 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
 }
 
 // Set name for variable and add to basic block info if not presented
-void Context::add_variable(Value * var, MyBasicBlock * my_block) {
+void Context::add_variable(Value const * var, MyBasicBlock & my_block) {
     // Skip labels and pointers
     if (var->getType()->isLabelTy() or var->getType()->isPointerTy()) { return; }
 
     if (!var->hasName()) {
-        var->setName("x" + std::to_string(var_index));
         ++var_index;
     }
 
-    my_block->vars.insert(var);
+    my_block.vars.insert(var);
 }
 
 // Create constraints for function call
-Implication::Constraints Context::transform_function_call(Instruction * I, MyFunctionInfo & function_info) {
+Implication::Constraints Context::transform_function_call(Instruction const * I, MyFunctionInfo & function_info) {
     Implication::Constraints result;
-    CallInst * call_inst = cast<CallInst>(I);
+    CallInst const * call_inst = cast<CallInst>(I);
 
     // Get function from instruction
     Function * fn = call_inst->getCalledFunction();
@@ -620,8 +616,8 @@ Implication::Constraints Context::transform_function_call(Instruction * I, MyFun
 namespace {
 
 // Transform Cmp instruction
-std::string cmp_sign(Instruction * I) {
-    CmpInst * CmpI = cast<CmpInst>(I);
+std::string cmp_sign(Instruction const * I) {
+    CmpInst const * CmpI = cast<CmpInst>(I);
     switch (CmpI->getPredicate()) {
         case CmpInst::ICMP_EQ:
             return "=";
@@ -646,8 +642,8 @@ std::string cmp_sign(Instruction * I) {
 }
 
 // Create binary constraint for comparison instruction
-std::unique_ptr<BinaryConstraint> transform_comparison(Instruction * I) {
-    CmpInst * comparison = cast<CmpInst>(I);
+std::unique_ptr<BinaryConstraint> transform_comparison(Instruction const * I) {
+    CmpInst const * comparison = cast<CmpInst>(I);
     auto sign = cmp_sign(comparison);
     auto * lhs = comparison->getOperand(0);
     auto * rhs = comparison->getOperand(1);
@@ -671,7 +667,7 @@ std::unique_ptr<BinaryConstraint> transform_comparison(Instruction * I) {
 }
 
 // Create binary constraint from binary instructions
-std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction * I) {
+std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
     std::string sign;
     switch (I->getOpcode()) {
         case Instruction::ICmp:
@@ -711,7 +707,7 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction * I) {
 }
 
 // Create constraint for zext instruction
-std::unique_ptr<MyConstraint> transform_zext(Instruction * I) {
+std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
     MyVariable input(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
     MyVariable output(convert_name_to_string(I), get_type(I->getType()));
 
@@ -723,7 +719,7 @@ std::unique_ptr<MyConstraint> transform_zext(Instruction * I) {
 }
 
 // Create constraint for trunc instruction
-std::unique_ptr<MyConstraint> transform_trunc(Instruction * I) {
+std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
     MyVariable input(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
     MyVariable output(convert_name_to_string(I), get_type(I->getType()));
 
@@ -735,12 +731,12 @@ std::unique_ptr<MyConstraint> transform_trunc(Instruction * I) {
 }
 
 // Create equality constraint for sext instruction
-std::unique_ptr<UnaryConstraint> transform_sext(Instruction * I) {
+std::unique_ptr<UnaryConstraint> transform_sext(Instruction const * I) {
     return std::make_unique<UnaryConstraint>(convert_name_to_string(I), convert_name_to_string(I->getOperand(0)));
 }
 
 // Create constraint for logic instruction with boolean variables
-std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction * I) {
+std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction const * I) {
     auto op1_type = get_type(I->getOperand(0)->getType());
     auto op2_type = get_type(I->getOperand(1)->getType());
 
@@ -754,7 +750,7 @@ std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction * I) {
 } // namespace
 
 // Create constraint for load instruction with global variable
-std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction * I) {
+std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction const * I) {
 
     std::string global_var_name = I->getOperand(0)->getName().str();
     int index = global_vars[global_var_name];
@@ -766,7 +762,7 @@ std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction * I)
 }
 
 // Create constraint for store instruction with global variable
-std::unique_ptr<StoreConstraint> Context::transform_store_operand(Instruction * I) {
+std::unique_ptr<StoreConstraint> Context::transform_store_operand(Instruction const * I) {
 
     std::string global_var_name = I->getOperand(1)->getName().str();
     global_vars[global_var_name]++;
@@ -782,9 +778,9 @@ std::vector<std::unique_ptr<UnaryConstraint>> Context::transform_phi_instruction
 
     std::vector<std::unique_ptr<UnaryConstraint>> result;
 
-    for (Instruction & I : successor.BB_link->instructionsWithoutDebug()) {
+    for (Instruction const & I : successor.BB_link->instructionsWithoutDebug()) {
         if (I.getOpcode() == Instruction::PHI) {
-            Value * translation = I.DoPHITranslation(successor.BB_link, predecessor.BB_link);
+            Value const * translation = I.DoPHITranslation(successor.BB_link, predecessor.BB_link);
 
             result.push_back(
                 std::make_unique<UnaryConstraint>(convert_name_to_string(&I), convert_operand_to_string(translation)));
@@ -799,7 +795,7 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
     Implication::Constraints result;
     function_info.e_index = 0;
 
-    for (Instruction & I : BB.BB_link->instructionsWithoutDebug()) {
+    for (Instruction const & I : BB.BB_link->instructionsWithoutDebug()) {
         switch (I.getOpcode()) {
             // Instructions with no constraint
             case Instruction::Br:
@@ -854,36 +850,15 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
 }
 
 // Create first implication for function input and transfer to BB1
-std::vector<Implication> Context::get_entry_block_implications(MyFunctionInfo const & function_info,
+Implication Context::get_entry_block_implications(MyFunctionInfo const & function_info,
                                                                MyBasicBlock const & BB1) {
-    std::vector<Implication> result;
-
-    // Create predicate for entry basic block with function arguments
-    MyBasicBlock BB_entry(nullptr, function_info.name + "0", 0);
-    Function & F = function_info.llvm_function;
-    for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
-        add_variable(arg, &BB_entry);
-    }
-    auto predicate = create_basic_block_predicate(BB_entry, true, function_info);
-    add_global_variables(predicate, function_info);
-
-    // Create first implication (true -> BBentry(x1,..))
-    result.emplace_back(predicate);
 
     // Create implication for transfer to first basic block
     // with initialized global variables
+    auto constraints = initialize_global_variables(function_info);
     auto BB1_predicate = create_basic_block_predicate(BB1, true, function_info);
-    Implication imp1(BB1_predicate);
-    imp1.constraints.push_back(std::make_unique<MyPredicate>(predicate));
-
-    initialize_global_variables(imp1, function_info);
-
     if (!BB1.isFalseBlock) { add_global_variables(BB1_predicate, function_info); }
-    imp1.head = BB1_predicate;
-
-    result.push_back(std::move(imp1));
-
-    return result;
+    return {std::move(BB1_predicate), std::move(constraints)};
 }
 
 // Create predicate for basic block: Format {name}({variables}), ex. BB1(%x1,%x2)
@@ -895,19 +870,17 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, bool 
 
     // Convert variables
     std::vector<MyVariable> vars;
-    std::string var_name;
-    std::string var_type;
     for (auto & v : BB.vars) {
         if (v->getValueID() != Value::ConstantIntVal) {
-            var_name = convert_name_to_string(v);
-            var_type = get_type(v->getType());
+            std::string var_name = convert_name_to_string(v);
+            std::string var_type = get_type(v->getType());
 
-            vars.push_back(MyVariable(var_name, var_type));
+            vars.push_back(MyVariable(std::move(var_name), std::move(var_type)));
         }
     }
 
     std::string suffix = isEntry ? "_entry" : "_exit";
-    return MyPredicate(BB.name + suffix, vars);
+    return {BB.name + suffix, vars};
 }
 
 // Create current function predicate not for call instruction
