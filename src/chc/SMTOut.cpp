@@ -7,6 +7,7 @@
 
 #include "SMTOut.hpp"
 
+namespace hornix {
 void SMTOutput::smt_declare_function(MyConstraint const & predicate) {
     if (predicate.GetType() == PREDICATE || predicate.GetType() == FUNCTION) {
         if (auto const * pred = dynamic_cast<MyPredicate const *>(&predicate)) {
@@ -32,7 +33,7 @@ void SMTOutput::smt_declare_function(MyConstraint const & predicate) {
                 output << ") Bool )" << std::endl;
 
                 declared_functions.insert(pred->name);
-            }
+                }
         }
     }
 }
@@ -152,3 +153,4 @@ void SMTOutput::smt_print_implications(std::vector<Implication> const & implicat
     print_footer();
     output << std::flush;
 }
+} // namespace hornix

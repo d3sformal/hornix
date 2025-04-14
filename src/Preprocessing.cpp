@@ -12,6 +12,8 @@
 
 using namespace llvm;
 
+namespace hornix {
+
 std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     PassBuilder PB;
 
@@ -39,3 +41,5 @@ std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     }
     return module;
 }
+
+} // namespace hornix

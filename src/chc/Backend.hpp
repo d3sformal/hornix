@@ -10,19 +10,20 @@
 #include <optional>
 #include <string>
 
+namespace hornix {
 struct SolverContext {
-    std::string solver;
-    std::optional<std::string> solver_dir;
-    std::string args;
+  std::string solver;
+  std::optional<std::string> solver_dir;
+  std::string args;
 
-    static SolverContext z3_default();
+  static SolverContext z3_default();
 };
 
 using Result = std::string;
 
 Result solve(std::string query);
 Result solve(std::string query, SolverContext context);
-
+} // namespace hornix
 
 
 #endif //BACKEND_HPP

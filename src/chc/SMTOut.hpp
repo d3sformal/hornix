@@ -12,6 +12,7 @@
 
 #include <iostream>
 
+namespace hornix {
 class SMTOutput {
 public:
   SMTOutput() : output(std::cout) {}
@@ -42,5 +43,6 @@ private:
   std::ostream & output;
   std::unordered_set<std::string> declared_functions;
 };
+} // namespace hornix
 
 #endif //SMTOUT_HPP

@@ -15,6 +15,8 @@
 
 namespace fs = std::filesystem;
 
+namespace hornix {
+
 SolverContext SolverContext::z3_default() {
     return {
     .solver = "z3",
@@ -52,3 +54,4 @@ Result solve(std::string query, SolverContext context) {
     std::string response = buffer.str();
     return response;
 }
+} // namespace hornix

@@ -10,16 +10,16 @@
 
 #include "Helpers.hpp"
 
-
+namespace hornix {
 using Implications = std::vector<Implication>;
 
 class ChcTransform {
 public:
-    Implications run(llvm::Module &);
+  Implications run(llvm::Module &);
 };
 
 Implications toChc(llvm::Module &);
-
+} // namespace hornix
 
 
 #endif //CHCTRANSFORM_HPP

@@ -15,6 +15,7 @@
 
 using namespace llvm;
 
+namespace hornix {
 class Context {
 public:
     static Context create(Module & module);
@@ -253,7 +254,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
                     if ((br->result == "true" && br->value == "false") ||
                         (br->result == "false" && br->value == "true")) {
                         continue;
-                    }
+                        }
                     implication.constraints.push_back(std::move(br));
                 }
             }
@@ -640,7 +641,7 @@ std::string cmp_sign(Instruction * I) {
             return "<=";
         default:
             throw std::logic_error("Unknown comparison symbol.");
-            break;
+        break;
     }
 }
 
@@ -677,30 +678,30 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction * I) {
             return transform_comparison(I);
         case Instruction::Add:
             sign = "+";
-            break;
+        break;
         case Instruction::Sub:
             sign = "-";
-            break;
+        break;
         case Instruction::Mul:
             sign = "*";
-            break;
+        break;
         case Instruction::UDiv:
         case Instruction::SDiv:
             sign = "div";
-            break;
+        break;
         case Instruction::URem:
         case Instruction::SRem:
             sign = "mod";
-            break;
+        break;
         case Instruction::Xor:
             sign = "xor";
-            break;
+        break;
         case Instruction::And:
             sign = "and";
-            break;
+        break;
         case Instruction::Or:
             sign = "or";
-            break;
+        break;
         default:
             throw std::logic_error("Wrong binary instruction.");
     }
@@ -818,28 +819,28 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
             case Instruction::URem:
             case Instruction::SRem:
                 result.push_back(transform_binary_inst(&I));
-                break;
+            break;
             case Instruction::ZExt:
                 result.push_back(transform_zext(&I));
-                break;
+            break;
             case Instruction::Trunc:
                 result.push_back(transform_trunc(&I));
-                break;
+            break;
             case Instruction::SExt:
                 result.push_back(transform_sext(&I));
-                break;
+            break;
             case Instruction::Load:
                 result.push_back(transform_load_operand(&I));
-                break;
+            break;
             case Instruction::Store:
                 result.push_back(transform_store_operand(&I));
-                break;
+            break;
             // Transform logic instruction on booleans
             case Instruction::Xor:
             case Instruction::And:
             case Instruction::Or:
                 result.push_back(transform_logic_operand(&I));
-                break;
+            break;
             case Instruction::Call: {
                 auto predicates = transform_function_call(&I, function_info);
                 std::move(predicates.begin(), predicates.end(), std::back_inserter(result));
@@ -964,3 +965,4 @@ Implications ChcTransform::run(Module & module) {
     }
     return context.finish();
 }
+} // namespace hornix

@@ -4,13 +4,16 @@
  *  SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef PREPROCESING_HPP
-#define PREPROCESING_HPP
+#ifndef PREPROCESSING_HPP
+#define PREPROCESSING_HPP
 
 #include "llvm/IR/Module.h"
 
+namespace hornix {
+
 std::unique_ptr<llvm::Module> transform(std::unique_ptr<llvm::Module> in);
 
+} // hornix
 
 
-#endif //PREPROCESING_HPP
+#endif //PREPROCESSING_HPP

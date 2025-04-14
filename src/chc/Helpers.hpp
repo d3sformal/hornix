@@ -18,13 +18,14 @@
 #include <string>
 #include <unordered_set>
 
+namespace hornix {
 const std::unordered_set<std::string> MAIN_FUNCTIONS = {
-    "main"
+  "main"
 };
 
 const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
-    "__assert",     "__assert2", "__assert_fail", "__assert_perror_fail",
-    "__assert_rtn", "_assert",   "_wassert"};
+  "__assert",     "__assert2", "__assert_fail", "__assert_perror_fail",
+  "__assert_rtn", "_assert",   "_wassert"};
 
 constexpr char PRIME_SIGN = 'p';
 
@@ -101,17 +102,17 @@ struct MyPredicate : MyConstraint {
   std::string Print() const override {
     auto res = name;
     if (vars.size() > 0) {
-        res += "( ";
-        auto first = 1;
-        for (auto &v : vars) {
-          if (!first) {
-            res += ", ";
-          } else {
-            first = 0;
-          }
-          res += v.isPrime ? v.name + PRIME_SIGN : v.name;
+      res += "( ";
+      auto first = 1;
+      for (auto &v : vars) {
+        if (!first) {
+          res += ", ";
+        } else {
+          first = 0;
         }
-        res += " )";
+        res += v.isPrime ? v.name + PRIME_SIGN : v.name;
+      }
+      res += " )";
     }
     return res;
   }
@@ -120,16 +121,16 @@ struct MyPredicate : MyConstraint {
     std::ostringstream res;
     auto var_size = vars.size();
     if (var_size > 0) {
-        res << "(";
+      res << "(";
     }
 
     res << name;
     for (auto v : vars) {
-        auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-        res << " " << name;
+      auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+      res << " " << name;
     }
     if (var_size > 0) {
-        res << " )";
+      res << " )";
     }
 
     return res.str();
@@ -197,9 +198,9 @@ struct BinaryConstraint : MyConstraint {
   std::string GetSMT() const override
   {
     if (sign == "!=") {
-        return "(= " + result + " (not (= " + operand1 + " " + operand2 + " )))";
+      return "(= " + result + " (not (= " + operand1 + " " + operand2 + " )))";
     } else {
-        return "(= " + result + " (" + sign + " " + operand1 + " " + operand2 + " ))";
+      return "(= " + result + " (" + sign + " " + operand1 + " " + operand2 + " ))";
     }
   }
 
@@ -372,5 +373,6 @@ inline bool isFailedAssertCall(llvm::Instruction * I) {
   }
   return false;
 }
+} // namespace hornix
 
 #endif //HELPERS_HPP
