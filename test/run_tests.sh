@@ -33,7 +33,8 @@ for bench in "${test_dir}"/*.c; do
     IR_FILE="${BASENAME}.ll"
     # First compile using clang to check for errors
     if ! clang -Xclang=-disable-O0-optnone -S -emit-llvm "${bench}" -o ${IR_FILE}  &> /dev/null; then
-      echo -e "${BASENAME}\t${READ}FAIL{$NC} (clang compile error)"
+      printf "%-30s ${RED}FAIL${NC}" "${BASENAME}"
+      echo " (clang compile error)"
       ((fail_count++))
       continue
     fi
@@ -54,14 +55,14 @@ for bench in "${test_dir}"/*.c; do
 
     if [[ "$FIRST_WORD" == "true" || "$FIRST_WORD" == "false" ]]; then
       if [[ "$FIRST_WORD" == "$EXPECTED" ]]; then
-        echo -e "${BASENAME}\t${GREEN}PASS${NC}"
+        printf "%-30s ${GREEN}PASS${NC}\n" "${BASENAME}"
         ((pass_count++))
       else
-        echo -e "${BASENAME}\t${RED}FAIL${NC}"
+        printf "%-30s ${RED}FAIL${NC}\n" "${BASENAME}"
         ((fail_count++))
       fi
     else
-      echo -e "${BASENAME}\t${RED}FAIL${NC}"
+      printf "%-30s ${RED}FAIL${NC}\n" "${BASENAME}"
       ((fail_count++))
     fi
   else
