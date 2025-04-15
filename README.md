@@ -7,9 +7,14 @@
 To build `Hornix`, you need `LLVM` installation discoverable by `CMake`.
 It is useful to provide CMake with a path to the directory with LLVM's CMake config using `-DLLVM_DIR=<your_path>`.
 
+*Note:* This will most likely be `<LLVM_INSTALL_DIR>/lib/cmake/llvm`, where `<LLVM_INSTALL_DIR>` is the directory of LLVM, either the installation or the main repository directory (if you are buildiing from source).
+For example, when llvm is installed with homebrew, the path could be `/opt/homebrew/Cellar/llvm/20.1.2/`
+
+
+
 To build `Hornix` run the following in the repository root:
 ```shell
-cmake -S . -B build -DCMAKE__BUILD_TYPE=Release -DLLVM_DIR=<path_to_llvm_cmake_config_dir>
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=<path_to_llvm_cmake_config_dir>
 cmake --build build
 ```
 
