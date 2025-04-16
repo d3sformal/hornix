@@ -62,7 +62,6 @@ private:
     MyPredicate get_fail_block_predicate(MyFunctionInfo const & function_info);
 
     std::unordered_map<std::string, int> global_vars;
-    unsigned int var_index = 0;
     Implications implications;
 };
 
@@ -125,12 +124,12 @@ MyFunctionInfo::BasicBlocks load_basic_blocks(Function const & F) {
 MyVariable get_function_call_var(MyBasicBlock const & BB, int e_index, MyBasicBlock const & successor) {
     if (BB.last_instruction != nullptr && BB.successors.size() > 0) {
         if (BB.successors.size() != 2 || successor.BB_link == BB.last_instruction->getOperand(2)) {
-            return MyVariable("false");
+            return MyVariable::constant("false");
         } else {
-            return MyVariable("e" + std::to_string(e_index), "Bool");
+            return MyVariable::variable("e" + std::to_string(e_index), "Bool");
         }
     } else {
-        return MyVariable("false");
+        return MyVariable::constant("false");
     }
 }
 
@@ -166,8 +165,8 @@ std::string convert_name_to_string(Value const * const value) {
 // return as function (-) with positive value (e.g. -100 => (- 100))
 std::string convert_operand_to_string(Value const * value) {
     if (get_type(value->getType()) == "Int") {
-        if (ConstantInt const * asConstant = dyn_cast<ConstantInt>(value)) {
-            auto num = asConstant->getSExtValue();
+        if (auto const * asConstant = dyn_cast<ConstantInt>(value)) {
+            auto const num = asConstant->getSExtValue();
             if (num < 0) { return "(- " + std::to_string(num * -1) + ')'; }
             return std::to_string(num);
         }
@@ -208,9 +207,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
     std::vector<Implication> clauses;
     clauses.push_back(get_entry_block_implications(function_info, function_info.basic_blocks.at(1)));
 
-    for (auto const & entry : function_info.basic_blocks) {
-        MyBasicBlock const & BB = entry.second;
-
+    for (auto const & [id, BB] : function_info.basic_blocks) {
         // Skip failed assert basic blocks
         if (BB.isFalseBlock) { continue; }
 
@@ -267,7 +264,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
             MyPredicate current_exit_predicate = create_basic_block_predicate(BB, false, function_info);
             add_global_variables(current_exit_predicate, function_info);
-            current_exit_predicate.vars.push_back(MyVariable("true"));
+            current_exit_predicate.vars.push_back(MyVariable::constant("true"));
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
             clauses.push_back(std::move(implication));
@@ -275,13 +272,13 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
         // From return instruction to function predicate implication
         if (BB.isLastBlock) {
-            auto fun_predicate = get_function_predicate(function_info, MyVariable("false"), MyVariable("false"));
+            auto fun_predicate = get_function_predicate(function_info, MyVariable::constant("false"), MyVariable::constant("false"));
 
             auto implication = Implication(fun_predicate);
 
             MyPredicate current_exit_predicate = create_basic_block_predicate(BB, false, function_info);
             add_global_variables(current_exit_predicate, function_info);
-            if (BB.isFunctionCalled) { current_exit_predicate.vars.push_back(MyVariable("false")); }
+            if (BB.isFunctionCalled) { current_exit_predicate.vars.push_back(MyVariable::constant("false")); }
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
             clauses.push_back(std::move(implication));
@@ -295,7 +292,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
         implication.constraints.push_back(std::make_unique<MyPredicate>(fail_predicate));
         clauses.push_back(std::move(implication));
     } else {
-        auto function_predicate = get_function_predicate(function_info, MyVariable("true"), MyVariable("true"));
+        auto function_predicate = get_function_predicate(function_info, MyVariable::constant("true"), MyVariable::constant("true"));
         clauses.emplace_back(function_predicate);
     }
 
@@ -307,9 +304,9 @@ void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const
     for (auto const & [name, index] : global_vars) {
         if (not function_info.is_main_function) {
             // No main function needs input value of global variable
-            predicate.vars.push_back(MyVariable(name, "Int"));
+            predicate.vars.push_back(MyVariable::variable(name, "Int"));
         }
-        predicate.vars.push_back(MyVariable(name + "_" + std::to_string(index), "Int"));
+        predicate.vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
     }
 }
 
@@ -357,7 +354,7 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
 
     // Add last output error variable if some function called in BB
     if (BB.isFunctionCalled) {
-        exit_predicate.vars.push_back(MyVariable("e" + std::to_string(function_info.e_index), "Bool"));
+        exit_predicate.vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
     }
 
     std::unordered_set<std::string> prime_vars;
@@ -476,8 +473,9 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
 
             // Remember function called in basic block (no assert)
             if (I.getOpcode() == Instruction::Call) {
-                auto fn = dyn_cast<CallInst>(&I)->getCalledFunction();
-                if (fn && !fn->isDeclaration()) { BB.isFunctionCalled = true; }
+                if (Function const * fn = dyn_cast<CallInst>(&I)->getCalledFunction(); fn and not fn->isDeclaration()) {
+                    BB.isFunctionCalled = true;
+                }
             }
 
             // Remember last br instruction (should be only one)
@@ -485,19 +483,19 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
 
             // Remember return value of function
             if (I.getOpcode() == Instruction::Ret) {
-                if (!function_info->llvm_function.getReturnType()->isVoidTy()) {
+                if (not function_info->llvm_function.getReturnType()->isVoidTy()) {
                     auto o = I.getOperand(0);
-                    if (o->getValueID() != Value::ConstantIntVal) {
-                        function_info->return_value = MyVariable(convert_name_to_string(o), get_type(o->getType()));
+                    if (o->getValueID() == Value::ConstantIntVal) {
+                        function_info->return_value = MyVariable::constant(convert_operand_to_string(o));
                     } else {
-                        function_info->return_value = MyVariable(convert_operand_to_string(o));
+                        function_info->return_value = MyVariable::variable(convert_name_to_string(o), get_type(o->getType()));
                     }
                 }
                 BB.isLastBlock = true;
             }
 
             // Add instructions returning void
-            if (!I.getType()->isVoidTy()) { add_variable(&I, BB); }
+            if (not I.getType()->isVoidTy()) { add_variable(&I, BB); }
 
             // Add all variables from instruction
             for (auto & o : I.operands()) {
@@ -511,11 +509,6 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
 void Context::add_variable(Value const * var, MyBasicBlock & my_block) {
     // Skip labels and pointers
     if (var->getType()->isLabelTy() or var->getType()->isPointerTy()) { return; }
-
-    if (!var->hasName()) {
-        ++var_index;
-    }
-
     my_block.vars.insert(var);
 }
 
@@ -526,14 +519,7 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
 
     // Get function from instruction
     Function * fn = call_inst->getCalledFunction();
-    std::string function_name;
-
-    // If no function, name can be taken from instruction operand
-    if (fn) {
-        function_name = fn->getName().str();
-    } else {
-        function_name = convert_name_to_string(I->getOperand(0));
-    }
+    std::string function_name = fn ? fn->getName().str() : convert_name_to_string(I->getOperand(0));
 
     // If function not declared, check name for predefined non-deterministic functions
     if (!fn || fn->isDeclaration()) {
@@ -566,47 +552,43 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
     }
 
     auto predicate = std::make_unique<FunctionPredicate>(function_name);
-    std::string var_name;
-    std::string var_type;
 
     // Add parameters
     for (auto arg = call_inst->arg_begin(); arg != call_inst->arg_end(); ++arg) {
         if (arg->get()->getValueID() != Value::ConstantIntVal) {
-            var_name = convert_name_to_string(arg->get());
-            var_type = get_type(arg->get()->getType());
+            std::string var_name = convert_name_to_string(arg->get());
+            std::string var_type = get_type(arg->get()->getType());
 
-            predicate->vars.push_back(MyVariable(var_name, var_type));
+            predicate->vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
         } else {
-            var_name = convert_operand_to_string(arg->get());
-
-            predicate->vars.push_back(MyVariable(var_name));
+            predicate->vars.push_back(MyVariable::constant(convert_operand_to_string(arg->get())));
         }
     }
 
     // Add return variable
     if (!fn->getReturnType()->isVoidTy()) {
-        var_name = convert_name_to_string(I);
+        std::string var_name = convert_name_to_string(I);
 
-        predicate->vars.push_back(MyVariable(var_name, get_type(fn->getReturnType()), true));
+        predicate->vars.push_back(MyVariable::prime_variable(var_name, get_type(fn->getReturnType())));
         predicate->changed_var = var_name;
     }
 
     // Add variables for input error variable
     if (function_info.e_index == 0) {
-        predicate->vars.push_back(MyVariable("false"));
+        predicate->vars.push_back(MyVariable::constant("false"));
     } else {
-        predicate->vars.push_back(MyVariable("e" + std::to_string(function_info.e_index), "Bool"));
+        predicate->vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
     }
 
     // Add variables for output error variable
     ++function_info.e_index;
-    predicate->vars.push_back(MyVariable("e" + std::to_string(function_info.e_index), "Bool"));
+    predicate->vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
 
     // Add global variables input and output values
     for (auto & var : global_vars) {
-        predicate->vars.push_back(MyVariable(var.first + "_" + std::to_string(var.second), "Int"));
+        predicate->vars.push_back(MyVariable::variable(var.first + "_" + std::to_string(var.second), "Int"));
         var.second++;
-        predicate->vars.push_back(MyVariable(var.first + "_" + std::to_string(var.second), "Int"));
+        predicate->vars.push_back(MyVariable::variable(var.first + "_" + std::to_string(var.second), "Int"));
     }
 
     result.push_back(std::move(predicate));
@@ -708,8 +690,8 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
 
 // Create constraint for zext instruction
 std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
-    MyVariable input(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
-    MyVariable output(convert_name_to_string(I), get_type(I->getType()));
+    MyVariable input = MyVariable::variable(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
+    MyVariable output = MyVariable::variable(convert_name_to_string(I), get_type(I->getType()));
 
     if (input.type == "Bool" && output.type == "Int") {
         return std::make_unique<ITEConstraint>(output.name, "1", input.name, "0");
@@ -720,8 +702,8 @@ std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
 
 // Create constraint for trunc instruction
 std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
-    MyVariable input(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
-    MyVariable output(convert_name_to_string(I), get_type(I->getType()));
+    MyVariable input = MyVariable::variable(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
+    MyVariable output = MyVariable::variable(convert_name_to_string(I), get_type(I->getType()));
 
     if (input.type == "Int" && output.type == "Bool") {
         return std::make_unique<BinaryConstraint>(output.name, input.name, "!=", "0");
@@ -875,7 +857,7 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, bool 
             std::string var_name = convert_name_to_string(v);
             std::string var_type = get_type(v->getType());
 
-            vars.push_back(MyVariable(std::move(var_name), std::move(var_type)));
+            vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
         }
     }
 
@@ -887,18 +869,16 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, bool 
 MyPredicate Context::get_function_predicate(MyFunctionInfo const & function_info, MyVariable e_in, MyVariable e_out) {
 
     // Create predicate
-    std::string var_name;
-    std::string var_type;
     Function & F = function_info.llvm_function;
     MyPredicate predicate{F.getName().str()};
 
     // Add parameters
     for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
         if (arg->getValueID() != Value::ConstantIntVal) {
-            var_name = convert_name_to_string(arg);
-            var_type = get_type(arg->getType());
+            std::string var_name = convert_name_to_string(arg);
+            std::string var_type = get_type(arg->getType());
 
-            predicate.vars.push_back(MyVariable(var_name, var_type));
+            predicate.vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
         }
     }
 
@@ -923,7 +903,7 @@ MyPredicate Context::get_fail_block_predicate(MyFunctionInfo const & function_in
         return MyPredicate(function_info.name + "_error");
     } else {
         // Return function predicate with output error
-        return get_function_predicate(function_info, MyVariable("false"), MyVariable("true"));
+        return get_function_predicate(function_info, MyVariable::constant("false"), MyVariable::constant("true"));
     }
 }
 
