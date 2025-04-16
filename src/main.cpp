@@ -16,14 +16,17 @@
 #include "llvm/IRReader/IRReader.h"
 
 #include <iostream>
+#include <filesystem>
 
 using namespace hornix;
+namespace fs = std::filesystem;
 
 int main(int argc, char * argv[]) {
 
     Options options = parse(argc, argv);
     assert(options.hasOption(Options::INPUT_FILE));
-    llvm::StringRef filename = options.getOption(Options::INPUT_FILE).value();
+    std::string path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal().string();
+    llvm::StringRef filename = path;
 
     llvm::LLVMContext context;
     llvm::SMDiagnostic err;
@@ -44,6 +47,11 @@ int main(int argc, char * argv[]) {
 
     std::stringstream query_stream;
     SMTOutput{query_stream}.smt_print_implications(chcs);
+
+    if (options.getOrDefault(Options::PRINT_CHC, "false") == "true") {
+        std::cout << query_stream.str() << std::endl;
+        return 0;
+    }
 
     auto res = solve(query_stream.str(),
         SolverContext::context_for_solver(
