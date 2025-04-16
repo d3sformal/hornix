@@ -26,7 +26,7 @@ This will create the `hornix` executable in `build/src`.
 Hornix currently accepts LLVM's IR textual representation, i.e., `.ll` files.
 To obtain `.ll` file from C file, you can use `clang 18` or higher:
 ```shell
-clang++ -Xclang -disable-O0-optnone -S -emit-llvm {source code} -o {output file}
+clang -Xclang -disable-O0-optnone -S -emit-llvm {source code} -o {output file}
 ```
 
 Then you can run `Hornix`
@@ -34,7 +34,7 @@ Then you can run `Hornix`
 For example, source code file *example.cpp* :
 
 ```
-clang++ -Xclang -disable-O0-optnone -S -emit-llvm example.cpp -o example.ll
+clang -Xclang -disable-O0-optnone -S -emit-llvm example.cpp -o example.ll
 
 build/src/hornix example.ll 
 ```
