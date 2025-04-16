@@ -20,10 +20,21 @@ namespace hornix {
 SolverContext SolverContext::z3_default() {
     return {
     .solver = "z3",
-    .solver_dir = std::nullopt,
-    .args = {}
+    .args = {},
+    .solver_dir = std::nullopt
     };
 }
+
+SolverContext SolverContext::context_for_solver(std::string solver_name, std::optional<std::string> solver_args, std::optional<std::string> solver_dir) {
+    return {
+        .solver = std::move(solver_name),
+        .solver_dir = std::move(solver_dir),
+        .args = std::move(solver_args).value_or("")
+    };
+}
+
+
+
 Result solve(std::string query) {
     return solve(std::move(query), SolverContext::z3_default());
 }

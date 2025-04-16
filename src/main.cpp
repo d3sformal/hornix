@@ -45,13 +45,13 @@ int main(int argc, char * argv[]) {
     std::stringstream query_stream;
     SMTOutput{query_stream}.smt_print_implications(chcs);
 
-    // SolverContext solver_context {
-    // .solver = "golem",
-    // .solver_dir = "/Users/blishko/projects/golem/build",
-    // .args = {}
-    // };
-    // auto res = solve(query_stream.str(), std::move(solver_context));
-    auto res = solve(query_stream.str());
+    auto res = solve(query_stream.str(),
+        SolverContext::context_for_solver(
+            options.getOrDefault(Options::SOLVER, std::string("z3")),
+            options.getOption(Options::SOLVER_ARGS),
+            options.getOption(Options::SOLVER_DIR)
+        )
+    );
     std::cout << res << std::endl;
 
     return 0;

@@ -17,6 +17,7 @@ struct SolverContext {
   std::string args;
 
   static SolverContext z3_default();
+  static SolverContext context_for_solver(std::string solver_name, std::optional<std::string> solver_args, std::optional<std::string> solver_dir);
 };
 
 using Result = std::string;

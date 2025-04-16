@@ -21,7 +21,9 @@ void printUsage() {
         "--version                  Print version number of Hornix\n"
         "-i,--input <file>          Input file (option not required)\n"
         "--print-chc                Dump CHC to standard output and exit\n"
-        "--solver <solver>          Horn solver to run: z3, golem, eldarica (default: z3)\n"
+        "--solver <solver>          Horn solver to run (default: z3)\n"
+        "--solver-dir='<dir>'       Directory with the chosen solver's executable\n"
+        "--solver-args='<args>'     Arguments to pass to the chosen solver\n"
         ;
     std::cout << std::flush;
 }
@@ -36,13 +38,14 @@ namespace hornix {
 const std::string Options::INPUT_FILE = "input";
 const std::string Options::PRINT_CHC = "print-chc";
 const std::string Options::SOLVER = "solver";
+const std::string Options::SOLVER_ARGS = "solver-args";
+const std::string Options::SOLVER_DIR = "solver-dir";
 
 Options parse(int argc, char ** argv) {
 
     Options res;
     int printVersion = 0;
     int printChc = 0;
-    std::string solver = "z3";
 
     struct option long_options[] =
         {
@@ -50,6 +53,8 @@ Options parse(int argc, char ** argv) {
             {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
             {Options::PRINT_CHC.c_str(), no_argument, &printChc, 1},
             {Options::SOLVER.c_str(), required_argument, nullptr, 0},
+            {Options::SOLVER_DIR.c_str(), required_argument, nullptr, 0},
+            {Options::SOLVER_ARGS.c_str(), required_argument, nullptr, 0},
             {"version", no_argument, &printVersion, 1},
             {0, 0, 0, 0}
         };
@@ -68,6 +73,12 @@ Options parse(int argc, char ** argv) {
                 }
                 if (strcmp(long_options[option_index].name, Options::SOLVER.c_str()) == 0) {
                     res.addOption(Options::SOLVER, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::SOLVER_DIR.c_str()) == 0) {
+                    res.addOption(Options::SOLVER_DIR, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::SOLVER_ARGS.c_str()) == 0) {
+                    res.addOption(Options::SOLVER_ARGS, optarg);
                 }
                 break;
             case 'h':
