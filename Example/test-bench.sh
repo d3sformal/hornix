@@ -21,13 +21,13 @@ fi
 for f in $files;
  do 
  file_name=$(basename $f .yml)
- expected=$(sed -n '/unreach-call.prp/ {n;p}' $f)
+ expected=$(sed -n '/unreach-call.prp/ {n; p;}' $f)
  if [[ "$expected" == *"true" ]]; then
     exp_res="safe"
  elif [[ "$expected" == *"false" ]]; then
     exp_res="unsafe"
  else
-    echo "$file_name; ERROR - no unreach"
+    echo "$file_name; SKIP - no unreach"
     continue 1
  fi
 

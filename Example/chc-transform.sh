@@ -28,34 +28,13 @@ else
   exit
 fi
 
-echo "(set-logic HORN)" > $dir_name/$file_name.smt2
-  
 clang -Xclang -disable-O0-optnone -S -fbracket-depth=400 -fdiscard-value-names -emit-llvm $1 -o $dir_name/$file_name.ll 2> /dev/null
 if [ $? -gt 0 ]; then 
     echo "error"
     exit
 fi 
-opt -passes=mem2reg,instsimplify -S $dir_name/$file_name.ll -o $dir_name/$file_name.ll 2> /dev/null
-if [ $? -gt 0 ]; then 
-    echo "error"
-    exit
-fi 
-opt -disable-output $dir_name/$file_name.ll -passes=chc-transform >> $dir_name/$file_name.smt2 2> /dev/null
-if [ $? -gt 0 ]; then 
-    echo "error"
-    exit
-fi 
 
-echo "(check-sat)" >> $dir_name/$file_name.smt2
-
-# Z3 solver
-RESULT=$(z3 -smt2 $dir_name/$file_name.smt2);
-
-# Eldarica solver
-# RESULT=$(eld $dir_name/$file_name.smt2);
-
-# Golem solver
-# RESULT=$(golem -l QF_LIA $dir_name/$file_name.smt2);
+RESULT=$(../build/src/hornix --solver z3 -i $dir_name/$file_name.ll)
 
 if [ "$RESULT" = "sat" ]; then
   echo "safe"
