@@ -5,6 +5,7 @@
  */
 
 #include "Preprocessing.hpp"
+#include "CLI.hpp"
 #include "chc/Backend.hpp"
 #include "chc/ChcTransform.hpp"
 #include "chc/SMTOut.hpp"
@@ -19,12 +20,10 @@
 using namespace hornix;
 
 int main(int argc, char * argv[]) {
-    if (argc <= 1)
-    {
-        std::cerr << "Provide an input file!" << std::endl;
-        exit(1);
-    }
-    llvm::StringRef filename = argv[1];
+
+    Options options = parse(argc, argv);
+    assert(options.hasOption(Options::INPUT_FILE));
+    llvm::StringRef filename = options.getOption(Options::INPUT_FILE).value();
 
     llvm::LLVMContext context;
     llvm::SMDiagnostic err;

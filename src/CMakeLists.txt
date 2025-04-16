@@ -2,6 +2,7 @@ add_executable(hornix main.cpp)
 
 target_sources(hornix
         PRIVATE
+        "CLI.cpp"
         "Preprocessing.cpp"
         "chc/ChcTransform.cpp"
         "chc/SMTOut.cpp"
