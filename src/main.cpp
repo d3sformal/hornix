@@ -4,8 +4,9 @@
  *  SPDX-License-Identifier: Apache-2.0
  */
 
-#include "Preprocessing.hpp"
 #include "CLI.hpp"
+#include "Exceptions.hpp"
+#include "Preprocessing.hpp"
 #include "chc/Backend.hpp"
 #include "chc/ChcTransform.hpp"
 #include "chc/SMTOut.hpp"
@@ -43,24 +44,26 @@ int main(int argc, char * argv[]) {
 
     // module->print(llvm::outs(), nullptr);
 
-    auto chcs = toChc(*module);
+    try {
+        auto chcs = toChc(*module);
+        std::stringstream query_stream;
+        SMTOutput{query_stream}.smt_print_implications(chcs);
+        if (options.getOrDefault(Options::PRINT_CHC, "false") == "true") {
+            std::cout << query_stream.str() << std::endl;
+            return 0;
+        }
 
-    std::stringstream query_stream;
-    SMTOutput{query_stream}.smt_print_implications(chcs);
-
-    if (options.getOrDefault(Options::PRINT_CHC, "false") == "true") {
-        std::cout << query_stream.str() << std::endl;
+        auto res = solve(query_stream.str(),
+            SolverContext::context_for_solver(
+                options.getOrDefault(Options::SOLVER, std::string("z3")),
+                options.getOption(Options::SOLVER_ARGS),
+                options.getOption(Options::SOLVER_DIR)
+            )
+        );
+        std::cout << res << std::endl;
         return 0;
+    } catch (UnsupportedFeature const & problem) {
+        std::cerr << problem.what() << std::endl;
+        return 1;
     }
-
-    auto res = solve(query_stream.str(),
-        SolverContext::context_for_solver(
-            options.getOrDefault(Options::SOLVER, std::string("z3")),
-            options.getOption(Options::SOLVER_ARGS),
-            options.getOption(Options::SOLVER_DIR)
-        )
-    );
-    std::cout << res << std::endl;
-
-    return 0;
 }

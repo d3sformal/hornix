@@ -23,6 +23,11 @@ target_link_libraries(hornix
     LLVMScalarOpts
 )
 
+target_include_directories(hornix
+  PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+)
+
 # Optional: Enable RTTI if needed
 if(LLVM_ENABLE_RTTI)
   target_compile_options(hornix PRIVATE -frtti)

@@ -7,6 +7,8 @@
 
 #include "ChcTransform.hpp"
 
+#include <Exceptions.hpp>
+
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Module.h>
@@ -149,7 +151,7 @@ std::string get_type(Type const * type) {
         auto w = cast<IntegerType>(type)->getBitWidth();
         return w == 1 ? "Bool" : "Int";
     }
-    throw std::logic_error("Unknown type of variable.");
+    throw UnsupportedFeature("Unknown type of variable.");
 }
 
 std::string convert_name_to_string(Value const * const value) {
@@ -618,7 +620,7 @@ std::string cmp_sign(Instruction const * I) {
         case CmpInst::ICMP_SLE:
             return "<=";
         default:
-            throw std::logic_error("Unknown comparison symbol.");
+            throw UnsupportedFeature("Unknown comparison symbol.");
         break;
     }
 }
@@ -681,7 +683,7 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
             sign = "or";
         break;
         default:
-            throw std::logic_error("Wrong binary instruction.");
+            throw UnsupportedFeature("Unknown binary instruction.");
     }
 
     return std::make_unique<BinaryConstraint>(convert_name_to_string(I), convert_operand_to_string(I->getOperand(0)),
@@ -825,7 +827,7 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
                 break;
             }
             default:
-                throw std::logic_error("Not implemented instruction");
+                throw UnsupportedFeature("Not implemented instruction");
         }
     }
     return result;
