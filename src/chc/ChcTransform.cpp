@@ -398,8 +398,10 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
 
         else if (ITEConstraint * ite = dynamic_cast<ITEConstraint *>(constraint.get())) {
 
-            // Set condition operand as prime when assigned before
+            // Set operands as prime when assigned before
             if (prime_vars.find(ite->condition) != prime_vars.end()) { ite->condition = ite->condition + PRIME_SIGN; }
+            if (prime_vars.find(ite->operand1) != prime_vars.end()) { ite->operand1 = ite->operand1 + PRIME_SIGN; }
+            if (prime_vars.find(ite->operand2) != prime_vars.end()) { ite->operand2 = ite->operand2 + PRIME_SIGN; }
 
             // Set assigned variable as prime in current constraint and head predicate
             set_prime_var_in_head(exit_predicate, ite->result);
