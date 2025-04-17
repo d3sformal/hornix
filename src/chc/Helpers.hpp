@@ -122,16 +122,13 @@ struct FunctionPredicate : MyPredicate {
 };
 struct ITEConstraint : MyConstraint {
     std::string result;
+    std::string condition;
     std::string operand1;
     std::string operand2;
-    std::string condition;
-    virtual ~ITEConstraint() {}
-    ITEConstraint(std::string result_, std::string operand1_, std::string condition_, std::string operand2_) {
-        result = result_;
-        operand1 = operand1_;
-        condition = condition_;
-        operand2 = operand2_;
-    }
+    ~ITEConstraint() override = default;
+    ITEConstraint(std::string result_, std::string condition_, std::string operand1_, std::string operand2_)
+        : result(std::move(result_)), condition(std::move(condition_)), operand1(std::move(operand1_)), operand2(std::move(operand2_)) {}
+
     std::string Print() const override { return result + "=ite(" + condition + "," + operand1 + "," + operand2 + ")"; }
 
     std::string GetSMT() const override {

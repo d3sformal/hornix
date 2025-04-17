@@ -696,10 +696,19 @@ std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
     MyVariable output = MyVariable::variable(convert_name_to_string(I), get_type(I->getType()));
 
     if (input.type == "Bool" && output.type == "Int") {
-        return std::make_unique<ITEConstraint>(output.name, "1", input.name, "0");
+        return std::make_unique<ITEConstraint>(output.name, input.name, "1", "0");
     } else {
         return std::make_unique<UnaryConstraint>(output.name, input.name);
     }
+}
+
+std::unique_ptr<MyConstraint> transform_select(SelectInst const * I) {
+    return std::make_unique<ITEConstraint>(
+        convert_name_to_string(I),
+        convert_operand_to_string(I->getCondition()),
+        convert_operand_to_string(I->getTrueValue()),
+        convert_operand_to_string(I->getFalseValue())
+    );
 }
 
 // Create constraint for trunc instruction
@@ -815,6 +824,10 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
             case Instruction::Store:
                 result.push_back(transform_store_operand(&I));
             break;
+            case Instruction::Select: {
+                result.push_back(transform_select(dyn_cast<SelectInst>(&I)));
+                break;
+            }
             // Transform logic instruction on booleans
             case Instruction::Xor:
             case Instruction::And:
