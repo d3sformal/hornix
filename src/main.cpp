@@ -42,7 +42,10 @@ int main(int argc, char * argv[]) {
 
     module = transform(std::move(module));
 
-    // module->print(llvm::outs(), nullptr);
+    if (options.getOrDefault(Options::PRINT_IR, "false") == "true") {
+        module->print(llvm::outs(), nullptr);
+        return 0;
+    }
 
     try {
         auto chcs = toChc(*module);

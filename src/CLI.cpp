@@ -21,6 +21,7 @@ void printUsage() {
         "--version                  Print version number of Hornix\n"
         "-i,--input <file>          Input file (option not required)\n"
         "--print-chc                Dump CHC to standard output and exit\n"
+        "--print-ir                 Dump IR being translated to standard output and exit\n"
         "--solver <solver>          Horn solver to run (default: z3)\n"
         "--solver-dir='<dir>'       Directory with the chosen solver's executable\n"
         "--solver-args='<args>'     Arguments to pass to the chosen solver\n"
@@ -37,6 +38,7 @@ namespace hornix {
 
 const std::string Options::INPUT_FILE = "input";
 const std::string Options::PRINT_CHC = "print-chc";
+const std::string Options::PRINT_IR = "print-ir";
 const std::string Options::SOLVER = "solver";
 const std::string Options::SOLVER_ARGS = "solver-args";
 const std::string Options::SOLVER_DIR = "solver-dir";
@@ -46,12 +48,14 @@ Options parse(int argc, char ** argv) {
     Options res;
     int printVersion = 0;
     int printChc = 0;
+    int printIR = 0;
 
     struct option long_options[] =
         {
             {"help", no_argument, nullptr, 'h'},
             {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
             {Options::PRINT_CHC.c_str(), no_argument, &printChc, 1},
+            {Options::PRINT_IR.c_str(), no_argument, &printIR, 1},
             {Options::SOLVER.c_str(), required_argument, nullptr, 0},
             {Options::SOLVER_DIR.c_str(), required_argument, nullptr, 0},
             {Options::SOLVER_ARGS.c_str(), required_argument, nullptr, 0},
@@ -98,10 +102,13 @@ Options parse(int argc, char ** argv) {
             exit(1);
         }
         // Assume the last argument not assigned to any option is input file
-        res.addOption("input", argv[optind]);
+        res.addOption(Options::INPUT_FILE, argv[optind]);
     }
     if (printChc) {
-        res.addOption("print-chc", "true");
+        res.addOption(Options::PRINT_CHC, "true");
+    }
+    if (printIR) {
+        res.addOption(Options::PRINT_IR, "true");
     }
     return res;
 }
