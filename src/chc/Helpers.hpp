@@ -276,11 +276,11 @@ struct MyFunctionInfo {
     // Type of variable to return from function
     MyVariable return_value;
     // Pointer to llvm function struct
-    llvm::Function & llvm_function;
+    llvm::Function const & llvm_function;
     // Error index
     int e_index;
 
-    MyFunctionInfo(llvm::Function & function, std::string name, bool is_main)
+    MyFunctionInfo(llvm::Function const & function, std::string name, bool is_main)
         : name(std::move(name)), is_main_function(is_main), llvm_function(function), e_index(0) {}
 };
 

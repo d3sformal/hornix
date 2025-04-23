@@ -22,7 +22,7 @@ class Context {
 public:
     static Context create(Module const & module);
 
-    void analyze(Function & F /*, FunctionAnalysisManager & AM*/);
+    void analyze(Function const & F /*, FunctionAnalysisManager & AM*/);
 
     Implications finish();
 
@@ -37,7 +37,7 @@ private:
 
     void set_basic_block_info(MyFunctionInfo * function_info);
 
-    MyFunctionInfo load_my_function_info(Function & F);
+    MyFunctionInfo load_my_function_info(Function const & F);
 
     Implication::Constraints transform_function_call(Instruction const * I, MyFunctionInfo & function_info);
 
@@ -94,14 +94,14 @@ Implications Context::finish() {
     return std::move(implications);
 }
 
-void Context::analyze(Function & F) {
+void Context::analyze(Function const & F) {
     auto function_info = load_my_function_info(F);
     auto implications = transform_basic_blocks(function_info);
     std::move(implications.begin(), implications.end(), std::back_inserter(this->implications));
 }
 
 namespace {
-MyFunctionInfo load_basic_info(Function & F) {
+MyFunctionInfo load_basic_info(Function const & F) {
     auto function_name = F.getName().str();
     bool is_main_function = isMainFunction(function_name);
     MyFunctionInfo function_info(F, function_name, is_main_function);
@@ -199,7 +199,7 @@ std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
 
 } // namespace
 
-MyFunctionInfo Context::load_my_function_info(Function & F) {
+MyFunctionInfo Context::load_my_function_info(Function const & F) {
     MyFunctionInfo function_info = load_basic_info(F);
     function_info.basic_blocks = load_basic_blocks(F);
     set_basic_block_info(&function_info);
@@ -456,7 +456,7 @@ void Context::set_basic_block_info(MyFunctionInfo * function_info) {
 
         // First basic block without predecessors load function arguments
         if (predecessors(block_link).empty()) {
-            Function & F = function_info->llvm_function;
+            Function const & F = function_info->llvm_function;
             // Load arguments as variables
             for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
                 add_variable(arg, BB);
@@ -896,7 +896,7 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, bool 
 MyPredicate Context::get_function_predicate(MyFunctionInfo const & function_info, MyVariable e_in, MyVariable e_out) {
 
     // Create predicate
-    Function & F = function_info.llvm_function;
+    Function const & F = function_info.llvm_function;
     MyPredicate predicate{F.getName().str()};
 
     // Add parameters
@@ -934,13 +934,13 @@ MyPredicate Context::get_fail_block_predicate(MyFunctionInfo const & function_in
     }
 }
 
-Implications toChc(Module & module) {
+Implications toChc(Module const & module) {
     return ChcTransform{}.run(module);
 }
 
-Implications ChcTransform::run(Module & module) {
+Implications ChcTransform::run(Module const & module) {
     auto context = Context::create(module);
-    for (Function & f : module) {
+    for (Function const & f : module) {
         if (not f.isDeclaration()) { context.analyze(f); }
     }
     return context.finish();
