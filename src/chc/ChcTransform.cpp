@@ -20,15 +20,15 @@ using namespace llvm;
 namespace hornix {
 class Context {
 public:
-    static Context create(Module & module);
+    static Context create(Module const & module);
 
     void analyze(Function & F /*, FunctionAnalysisManager & AM*/);
 
     Implications finish();
 
-private:
-    void set_global_variables(Module & module);
+    using GlobalInfo = llvm::DenseMap<GlobalVariable const *, std::pair<std::string, int>>;
 
+private:
     void add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info);
 
     Implication::Constraints initialize_global_variables(MyFunctionInfo const & function_info);
@@ -63,29 +63,31 @@ private:
 
     MyPredicate get_fail_block_predicate(MyFunctionInfo const & function_info);
 
-    std::unordered_map<std::string, int> global_vars;
+    GlobalInfo global_vars;
     Implications implications;
 };
 
-// FIXME: Module should be const&
-Context Context::create(Module & module) {
-    Context context;
-    context.set_global_variables(module);
-    return context;
-}
-
-// FIXME: Do not rename variables of the module!
-void Context::set_global_variables(Module & module) {
+namespace {
+Context::GlobalInfo get_global_info(Module const & module) {
+    Context::GlobalInfo global_info;
     auto globals = module.globals();
     unsigned j = 0u;
-    for (GlobalValue & var : globals) {
+    for (GlobalVariable const & var : globals) {
         if (var.getValueType()->isIntegerTy()) {
             auto name = "g" + std::to_string(j);
-            var.setName(name);
-            global_vars[name] = 0;
+            auto value = std::make_pair(std::move(name), 0);
+            global_info.insert(std::make_pair(&var, std::move(value)));
             j++;
         }
     }
+    return global_info;
+}
+} // namespace
+
+Context Context::create(Module const & module) {
+    Context context;
+    context.global_vars = get_global_info(module);
+    return context;
 }
 
 Implications Context::finish() {
@@ -303,7 +305,8 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
 // Add global variables to basic block predicate
 void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info) {
-    for (auto const & [name, index] : global_vars) {
+    for (auto const & [llvm_global, entry] : global_vars) {
+        auto const & [name, index] = entry;
         if (not function_info.is_main_function) {
             // No main function needs input value of global variable
             predicate.vars.push_back(MyVariable::variable(name, "Int"));
@@ -321,10 +324,11 @@ Implication::Constraints Context::initialize_global_variables(MyFunctionInfo con
 
         for (auto & var : globals) {
             if (var.getValueType()->isIntegerTy()) {
-                auto name = var.getName().str();
-                ++global_vars[name];
-
-                auto result = name + "_" + std::to_string(global_vars[name]);
+                auto it = global_vars.find(&var);
+                assert(it != global_vars.end());
+                auto & [name, index] = it->second;
+                ++index;
+                auto result = name + "_" + std::to_string(index);
                 auto value = convert_operand_to_string(var.getInitializer());
                 constraints.push_back(std::make_unique<StoreConstraint>(result, value));
             }
@@ -332,11 +336,11 @@ Implication::Constraints Context::initialize_global_variables(MyFunctionInfo con
     } else {
         // No main function takes values of global variable
         // from input global variable in predicate
-        for (auto & var : global_vars) {
-            ++var.second;
-
-            auto result = var.first + "_" + std::to_string(var.second);
-            auto value = var.first;
+        for (auto & [var, entry] : global_vars) {
+            auto & [name, index] = entry;
+            ++index;
+            auto result = name + "_" + std::to_string(index);
+            auto value = name;
             constraints.push_back(std::make_unique<StoreConstraint>(result, value));
         }
     }
@@ -589,10 +593,11 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
     predicate->vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
 
     // Add global variables input and output values
-    for (auto & var : global_vars) {
-        predicate->vars.push_back(MyVariable::variable(var.first + "_" + std::to_string(var.second), "Int"));
-        var.second++;
-        predicate->vars.push_back(MyVariable::variable(var.first + "_" + std::to_string(var.second), "Int"));
+    for (auto & [var, entry] : global_vars) {
+        auto & [name, index] = entry;
+        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
+        index++;
+        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
     }
 
     result.push_back(std::move(predicate));
@@ -746,24 +751,29 @@ std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction const * I)
 
 // Create constraint for load instruction with global variable
 std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction const * I) {
-
-    std::string global_var_name = I->getOperand(0)->getName().str();
-    int index = global_vars[global_var_name];
+    assert(llvm::isa<GlobalVariable>(I->getOperand(0)));
+    auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(0));
+    if (not global_var) { throw std::logic_error("Unexpected operand of load instruction"); }
+    auto it = global_vars.find(global_var);
+    if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
+    auto const & [name, index] = it->second;
 
     auto result = convert_name_to_string(I);
-    auto value = global_var_name + "_" + std::to_string(index);
+    auto value = name + "_" + std::to_string(index);
 
     return std::make_unique<LoadConstraint>(std::move(result), std::move(value));
 }
 
 // Create constraint for store instruction with global variable
 std::unique_ptr<StoreConstraint> Context::transform_store_operand(Instruction const * I) {
-
-    std::string global_var_name = I->getOperand(1)->getName().str();
-    global_vars[global_var_name]++;
-    int index = global_vars[global_var_name];
-
-    return std::make_unique<StoreConstraint>(global_var_name + "_" + std::to_string(index),
+    assert(llvm::isa<GlobalVariable>(I->getOperand(1)));
+    auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(1));
+    if (not global_var) { throw std::logic_error("Unexpected operand of store instruction"); }
+    auto it = global_vars.find(global_var);
+    if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
+    auto & [name, index] = it->second;
+    ++index;
+    return std::make_unique<StoreConstraint>(name + "_" + std::to_string(index),
                                              convert_operand_to_string(I->getOperand(0)));
 }
 
