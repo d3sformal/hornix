@@ -233,6 +233,19 @@ struct Implication {
     Implication & operator=(Implication const & other) = delete;
 };
 
+enum class BasicBlockPredicateType {ENTRY, EXIT};
+
+inline std::string to_string(BasicBlockPredicateType type) {
+    switch (type) {
+        case BasicBlockPredicateType::ENTRY:
+            return "entry";
+        case BasicBlockPredicateType::EXIT:
+            return "exit";
+    }
+    assert(false);
+    return "";
+}
+
 struct MyBasicBlock {
     // Reference to basic block
     llvm::BasicBlock const * BB_link;
