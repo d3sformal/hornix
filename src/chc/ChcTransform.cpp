@@ -31,12 +31,6 @@ public:
 private:
     void add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info);
 
-    void add_variable(Value const * var, MyBasicBlock & my_block);
-
-    void set_basic_block_info(MyFunctionInfo * function_info);
-
-    MyFunctionInfo load_my_function_info(Function const & F);
-
     Implication::Constraints transform_function_call(Instruction const * I, MyFunctionInfo & function_info);
 
     std::vector<Implication> transform_basic_blocks(MyFunctionInfo & function_info);
@@ -90,12 +84,6 @@ Context Context::create(Module const & module) {
 
 Implications Context::finish() {
     return std::move(implications);
-}
-
-void Context::analyze(Function const & F) {
-    auto function_info = load_my_function_info(F);
-    auto implications = transform_basic_blocks(function_info);
-    std::move(implications.begin(), implications.end(), std::back_inserter(this->implications));
 }
 
 namespace {
@@ -195,13 +183,105 @@ std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
     return std::nullopt;
 }
 
-} // namespace
+void add_variable(Value const * var, MyBasicBlock & my_block) {
+    // Skip labels and pointers
+    if (var->getType()->isLabelTy() or var->getType()->isPointerTy()) { return; }
+    my_block.vars.insert(var);
+}
 
-MyFunctionInfo Context::load_my_function_info(Function const & F) {
+void set_basic_block_info(MyFunctionInfo * function_info) {
+    for (auto & it : function_info->basic_blocks) {
+        MyBasicBlock & BB = it.second;
+        BasicBlock const * block_link = BB.BB_link;
+
+        // Set Predecessors of blocks and variables from them
+        for (auto pred : predecessors(block_link)) {
+            // Find predecessor id
+            auto maybe_pred_id = get_block_id_by_link(pred, function_info->basic_blocks);
+            if (maybe_pred_id.has_value()) {
+                auto pred_id = maybe_pred_id.value();
+                // Add predecessor
+                BB.predecessors.push_back(pred_id);
+
+                // Add new variables from predecessor
+                for (auto v : function_info->basic_blocks.at(pred_id).vars) {
+                    add_variable(v, BB);
+                }
+            }
+        }
+
+        // First basic block without predecessors load function arguments
+        if (predecessors(block_link).empty()) {
+            Function const & F = function_info->llvm_function;
+            // Load arguments as variables
+            for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
+                add_variable(arg, BB);
+            }
+        }
+
+        // Set successors of block
+        for (auto succ : successors(block_link)) {
+            auto maybe_succ_id = get_block_id_by_link(succ, function_info->basic_blocks);
+            assert(maybe_succ_id.has_value());
+            BB.successors.push_back(maybe_succ_id.value());
+        }
+
+        // Find all used variables in instructions
+        for (Instruction const & I : block_link->instructionsWithoutDebug()) {
+
+            // See if basic block handles failed assertion
+            if (isFailedAssertCall(I)) {
+                BB.isFalseBlock = true;
+                break;
+            }
+
+            // Remember function called in basic block (no assert)
+            if (I.getOpcode() == Instruction::Call) {
+                if (Function const * fn = dyn_cast<CallInst>(&I)->getCalledFunction(); fn and not fn->isDeclaration()) {
+                    BB.isFunctionCalled = true;
+                }
+            }
+
+            // Remember last br instruction (should be only one)
+            if (I.getOpcode() == Instruction::Br) { BB.last_instruction = &I; }
+
+            // Remember return value of function
+            if (I.getOpcode() == Instruction::Ret) {
+                if (not function_info->llvm_function.getReturnType()->isVoidTy()) {
+                    auto o = I.getOperand(0);
+                    if (o->getValueID() == Value::ConstantIntVal) {
+                        function_info->return_value = MyVariable::constant(convert_operand_to_string(o));
+                    } else {
+                        function_info->return_value = MyVariable::variable(convert_name_to_string(o), get_type(o->getType()));
+                    }
+                }
+                BB.isLastBlock = true;
+            }
+
+            // Add instructions returning void
+            if (not I.getType()->isVoidTy()) { add_variable(&I, BB); }
+
+            // Add all variables from instruction
+            for (auto & o : I.operands()) {
+                add_variable(o, BB);
+            }
+        }
+    }
+}
+
+MyFunctionInfo load_my_function_info(Function const & F) {
     MyFunctionInfo function_info = load_basic_info(F);
     function_info.basic_blocks = load_basic_blocks(F);
     set_basic_block_info(&function_info);
     return function_info;
+}
+
+} // namespace
+
+void Context::analyze(Function const & F) {
+    auto function_info = load_my_function_info(F);
+    auto implications = transform_basic_blocks(function_info);
+    std::move(implications.begin(), implications.end(), std::back_inserter(this->implications));
 }
 
 std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & function_info) {
@@ -399,93 +479,6 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
     Implication implication(exit_predicate);
     implication.constraints = std::move(constraints);
     return implication;
-}
-
-void Context::set_basic_block_info(MyFunctionInfo * function_info) {
-    for (auto & it : function_info->basic_blocks) {
-        MyBasicBlock & BB = it.second;
-        BasicBlock const * block_link = BB.BB_link;
-
-        // Set Predecessors of blocks and variables from them
-        for (auto pred : predecessors(block_link)) {
-            // Find predecessor id
-            auto maybe_pred_id = get_block_id_by_link(pred, function_info->basic_blocks);
-            if (maybe_pred_id.has_value()) {
-                auto pred_id = maybe_pred_id.value();
-                // Add predecessor
-                BB.predecessors.push_back(pred_id);
-
-                // Add new variables from predecessor
-                for (auto v : function_info->basic_blocks.at(pred_id).vars) {
-                    add_variable(v, BB);
-                }
-            }
-        }
-
-        // First basic block without predecessors load function arguments
-        if (predecessors(block_link).empty()) {
-            Function const & F = function_info->llvm_function;
-            // Load arguments as variables
-            for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
-                add_variable(arg, BB);
-            }
-        }
-
-        // Set successors of block
-        for (auto succ : successors(block_link)) {
-            auto maybe_succ_id = get_block_id_by_link(succ, function_info->basic_blocks);
-            assert(maybe_succ_id.has_value());
-            BB.successors.push_back(maybe_succ_id.value());
-        }
-
-        // Find all used variables in instructions
-        for (Instruction const & I : block_link->instructionsWithoutDebug()) {
-
-            // See if basic block handles failed assertion
-            if (isFailedAssertCall(I)) {
-                BB.isFalseBlock = true;
-                break;
-            }
-
-            // Remember function called in basic block (no assert)
-            if (I.getOpcode() == Instruction::Call) {
-                if (Function const * fn = dyn_cast<CallInst>(&I)->getCalledFunction(); fn and not fn->isDeclaration()) {
-                    BB.isFunctionCalled = true;
-                }
-            }
-
-            // Remember last br instruction (should be only one)
-            if (I.getOpcode() == Instruction::Br) { BB.last_instruction = &I; }
-
-            // Remember return value of function
-            if (I.getOpcode() == Instruction::Ret) {
-                if (not function_info->llvm_function.getReturnType()->isVoidTy()) {
-                    auto o = I.getOperand(0);
-                    if (o->getValueID() == Value::ConstantIntVal) {
-                        function_info->return_value = MyVariable::constant(convert_operand_to_string(o));
-                    } else {
-                        function_info->return_value = MyVariable::variable(convert_name_to_string(o), get_type(o->getType()));
-                    }
-                }
-                BB.isLastBlock = true;
-            }
-
-            // Add instructions returning void
-            if (not I.getType()->isVoidTy()) { add_variable(&I, BB); }
-
-            // Add all variables from instruction
-            for (auto & o : I.operands()) {
-                add_variable(o, BB);
-            }
-        }
-    }
-}
-
-// Set name for variable and add to basic block info if not presented
-void Context::add_variable(Value const * var, MyBasicBlock & my_block) {
-    // Skip labels and pointers
-    if (var->getType()->isLabelTy() or var->getType()->isPointerTy()) { return; }
-    my_block.vars.insert(var);
 }
 
 // Create constraints for function call
