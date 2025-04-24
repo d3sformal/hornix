@@ -89,8 +89,8 @@ int SMTOutput::smt_quantifiers(Implication const & implication, int indent) {
             }
         } else if (LoadConstraint * load = dynamic_cast<LoadConstraint *>(constraint.get())) {
             vars.insert(std::make_pair(load->value, "Int"));
-        } else if (StoreConstraint * store = dynamic_cast<StoreConstraint *>(constraint.get())) {
-            vars.insert(std::make_pair(store->result, "Int"));
+        } else if (auto * equality = dynamic_cast<Equality *>(constraint.get())) {
+            vars.insert(std::make_pair(equality->result, "Int"));
         }
     }
 

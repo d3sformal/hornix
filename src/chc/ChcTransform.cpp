@@ -31,8 +31,6 @@ public:
 private:
     void add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info);
 
-    Implication::Constraints initialize_global_variables(MyFunctionInfo const & function_info);
-
     void add_variable(Value const * var, MyBasicBlock & my_block);
 
     void set_basic_block_info(MyFunctionInfo * function_info);
@@ -47,12 +45,12 @@ private:
 
     std::unique_ptr<LoadConstraint> transform_load_operand(Instruction const * I);
 
-    std::unique_ptr<StoreConstraint> transform_store_operand(Instruction const * I);
+    std::unique_ptr<Equality> transform_store_operand(Instruction const * I);
 
     std::vector<std::unique_ptr<UnaryConstraint>> transform_phi_instructions(MyBasicBlock const & predecessor,
                                                                              MyBasicBlock const & successor);
 
-    Implication get_entry_block_implications(MyFunctionInfo const & function_info, MyBasicBlock const & BB1);
+    Implication get_entry_block_implication(MyFunctionInfo const & function_info, MyBasicBlock const & BB1);
 
     MyPredicate create_basic_block_predicate(MyBasicBlock const & BB, bool isEntry,
                                              MyFunctionInfo const & function_info);
@@ -209,7 +207,7 @@ MyFunctionInfo Context::load_my_function_info(Function const & F) {
 std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & function_info) {
 
     std::vector<Implication> clauses;
-    clauses.push_back(get_entry_block_implications(function_info, function_info.basic_blocks.at(1)));
+    clauses.push_back(get_entry_block_implication(function_info, function_info.basic_blocks.at(1)));
 
     for (auto const & [id, BB] : function_info.basic_blocks) {
         // Skip failed assert basic blocks
@@ -315,37 +313,7 @@ void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const
     }
 }
 
-// Add constraints for global variables initialized values
-Implication::Constraints Context::initialize_global_variables(MyFunctionInfo const & function_info) {
-    Implication::Constraints constraints;
-    if (function_info.is_main_function) {
-        // Main function takes initial values of variable
-        auto globals = function_info.llvm_function.getParent()->globals();
 
-        for (auto & var : globals) {
-            if (var.getValueType()->isIntegerTy()) {
-                auto it = global_vars.find(&var);
-                assert(it != global_vars.end());
-                auto & [name, index] = it->second;
-                ++index;
-                auto result = name + "_" + std::to_string(index);
-                auto value = convert_operand_to_string(var.getInitializer());
-                constraints.push_back(std::make_unique<StoreConstraint>(result, value));
-            }
-        }
-    } else {
-        // No main function takes values of global variable
-        // from input global variable in predicate
-        for (auto & [var, entry] : global_vars) {
-            auto & [name, index] = entry;
-            ++index;
-            auto result = name + "_" + std::to_string(index);
-            auto value = name;
-            constraints.push_back(std::make_unique<StoreConstraint>(result, value));
-        }
-    }
-    return constraints;
-}
 
 // Create implication from entry to exit point in basic block
 Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInfo & function_info) {
@@ -421,7 +389,7 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
             lc->result = lc->result + PRIME_SIGN;
         }
 
-        else if (StoreConstraint * sc = dynamic_cast<StoreConstraint *>(constraint.get())) {
+        else if (auto * sc = dynamic_cast<Equality *>(constraint.get())) {
 
             // Set operand as prime when assigned before
             if (prime_vars.find(sc->value) != prime_vars.end()) { sc->value = sc->value + PRIME_SIGN; }
@@ -765,7 +733,7 @@ std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction cons
 }
 
 // Create constraint for store instruction with global variable
-std::unique_ptr<StoreConstraint> Context::transform_store_operand(Instruction const * I) {
+std::unique_ptr<Equality> Context::transform_store_operand(Instruction const * I) {
     assert(llvm::isa<GlobalVariable>(I->getOperand(1)));
     auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(1));
     if (not global_var) { throw std::logic_error("Unexpected operand of store instruction"); }
@@ -773,7 +741,7 @@ std::unique_ptr<StoreConstraint> Context::transform_store_operand(Instruction co
     if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
     auto & [name, index] = it->second;
     ++index;
-    return std::make_unique<StoreConstraint>(name + "_" + std::to_string(index),
+    return std::make_unique<Equality>(name + "_" + std::to_string(index),
                                              convert_operand_to_string(I->getOperand(0)));
 }
 
@@ -858,13 +826,23 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
     return result;
 }
 
-// Create first implication for function input and transfer to BB1
-Implication Context::get_entry_block_implications(MyFunctionInfo const & function_info,
-                                                               MyBasicBlock const & BB1) {
+namespace {
+Implication::Constraints constraints_on_globals(MyFunctionInfo const & function_info, Context::GlobalInfo & global_info) {
+    Implication::Constraints constraints;
+    for (auto & [var, entry] : global_info) {
+        auto & [name, index] = entry;
+        ++index;
+        auto result = name + "_" + std::to_string(index);
+        auto value = function_info.is_main_function ? convert_operand_to_string(var->getInitializer()) : name;
+        constraints.push_back(std::make_unique<Equality>(result, value));
+    }
+    return constraints;
+}
+} // namespace
 
-    // Create implication for transfer to first basic block
-    // with initialized global variables
-    auto constraints = initialize_global_variables(function_info);
+/// Transfer to first basic block, we only need to make sure we have the right values of global variables
+Implication Context::get_entry_block_implication(MyFunctionInfo const & function_info, MyBasicBlock const & BB1) {
+    auto constraints = constraints_on_globals(function_info, global_vars);
     auto BB1_predicate = create_basic_block_predicate(BB1, true, function_info);
     if (!BB1.isFalseBlock) { add_global_variables(BB1_predicate, function_info); }
     return {std::move(BB1_predicate), std::move(constraints)};

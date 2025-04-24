@@ -33,7 +33,7 @@ const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
 const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
 const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, STORE, PREDICATE, FUNCTION };
+enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION };
 
 struct MyVariable {
     std::string name{};
@@ -203,19 +203,19 @@ struct LoadConstraint : MyConstraint {
 
     MyPredicateType GetType() const override { return LOAD; }
 };
-struct StoreConstraint : MyConstraint {
+struct Equality : MyConstraint {
     std::string result;
     std::string value;
-    virtual ~StoreConstraint() = default;
-    StoreConstraint(std::string result_, std::string value_) {
+    ~Equality() override = default;
+    Equality(std::string result_, std::string value_) {
         result = std::move(result_);
         value = std::move(value_);
     }
-    std::string Print() const override { return result + " = " + value; }
+    [[nodiscard]] std::string Print() const override { return result + " = " + value; }
 
-    std::string GetSMT() const override { return "(= " + result + " " + value + " )"; }
+    [[nodiscard]] std::string GetSMT() const override { return "(= " + result + " " + value + " )"; }
 
-    MyPredicateType GetType() const override { return STORE; }
+    [[nodiscard]] MyPredicateType GetType() const override { return EQUALITY; }
 };
 
 struct Implication {
