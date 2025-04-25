@@ -4,9 +4,11 @@ target_sources(hornix
         PRIVATE
         "CLI.cpp"
         "Preprocessing.cpp"
-        "chc/ChcTransform.cpp"
-        "chc/SMTOut.cpp"
         "chc/Backend.cpp"
+        "chc/ChcTransform.cpp"
+        "chc/Helpers.cpp"
+        "chc/SMTOut.cpp"
+        "chc/utils/Liveness.cpp"
 )
 
 include_directories(${LLVM_INCLUDE_DIRS})

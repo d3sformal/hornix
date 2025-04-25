@@ -68,41 +68,14 @@ void SMTOutput::smt_print_constraints(Implication::Constraints const & constrain
 
 // Print all variables from predicates in implication
 int SMTOutput::smt_quantifiers(Implication const & implication, int indent) {
-    std::map<std::string, std::string> vars;
-
-    // Variables from head of implication
-    for (auto v : implication.head.vars) {
-        if (!v.isConstant) {
-            auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-            vars.insert(std::make_pair(name, v.type));
-        }
-    }
-
-    // Variables in predicates
-    for (auto const & constraint : implication.constraints) {
-        if (MyPredicate * pred = dynamic_cast<MyPredicate *>(constraint.get())) {
-            for (auto & v : pred->vars) {
-                if (!v.isConstant) {
-                    auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
-                    vars.insert(std::make_pair(name, v.type));
-                }
-            }
-        } else if (LoadConstraint * load = dynamic_cast<LoadConstraint *>(constraint.get())) {
-            vars.insert(std::make_pair(load->value, "Int"));
-        } else if (auto * equality = dynamic_cast<Equality *>(constraint.get())) {
-            vars.insert(std::make_pair(equality->result, "Int"));
-        }
-    }
-
+    auto vars = all_vars(implication);
+    if (vars.empty()) { vars.insert(MyVariable::variable("HORNIX_UNUSED", "Bool")); }
     // Print variables
-    if (vars.size() > 0) {
         output << std::string(indent++, ' ') << "(forall ( ";
         for (auto v : vars) {
-            output << "( " << v.first << " " << v.second << " )";
+            output << "( " << v.name << " " << v.type << " )";
         }
         output << " )" << std::endl;
-    }
-
     return indent;
 }
 

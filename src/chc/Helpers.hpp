@@ -8,6 +8,8 @@
 #ifndef HELPERS_HPP
 #define HELPERS_HPP
 
+#include "utils/Liveness.hpp"
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -25,8 +27,6 @@ const std::unordered_set<std::string> ASSERT_FUNCTIONS = {
     "__assert", "__assert2", "__assert_fail", "__assert_perror_fail", "__assert_rtn", "_assert", "_wassert"
 };
 
-constexpr char PRIME_SIGN = 'p';
-
 const std::string UNSIGNED_UINT_FUNCTION = "__VERIFIER_nondet_uint";
 const std::string UNSIGNED_USHORT_FUNCTION = "__VERIFIER_nondet_ushort";
 const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
@@ -38,21 +38,19 @@ enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE
 struct MyVariable {
     std::string name{};
     std::string type{};
-    bool isPrime{};
     bool isConstant{};
 
     static MyVariable constant(std::string val) {
-        return MyVariable{.name = std::move(val), .type = {}, .isPrime = false, .isConstant = true};
+        return MyVariable{.name = std::move(val), .type = {}, .isConstant = true};
     }
 
     static MyVariable variable(std::string name, std::string type) {
-        return MyVariable{.name = std::move(name), .type = std::move(type), .isPrime = false, .isConstant = false};
-    }
-
-    static MyVariable prime_variable(std::string name, std::string type) {
-        return MyVariable{.name = std::move(name), .type = std::move(type), .isPrime = true, .isConstant = false};
+        return MyVariable{.name = std::move(name), .type = std::move(type), .isConstant = false};
     }
 };
+
+// TODO: This is probably not entirely correct
+inline bool operator<(MyVariable const & first, MyVariable const & second) { return first.name < second.name; }
 
 struct MyConstraint {
     virtual ~MyConstraint() {}
@@ -83,7 +81,7 @@ struct MyPredicate : MyConstraint {
                 } else {
                     first = 0;
                 }
-                res += v.isPrime ? v.name + PRIME_SIGN : v.name;
+                res += v.name;
             }
             res += " )";
         }
@@ -97,7 +95,7 @@ struct MyPredicate : MyConstraint {
 
         res << name;
         for (auto v : vars) {
-            auto name = v.isPrime ? v.name + PRIME_SIGN : v.name;
+            auto name = v.name;
             res << " " << name;
         }
         if (var_size > 0) { res << " )"; }
@@ -108,112 +106,75 @@ struct MyPredicate : MyConstraint {
     MyPredicateType GetType() const override { return PREDICATE; }
 };
 
-struct FunctionPredicate : MyPredicate {
-    std::string changed_var;
-    virtual ~FunctionPredicate() {}
-    FunctionPredicate() {}
-    FunctionPredicate(std::string name_) { name = name_; }
-    FunctionPredicate(std::string name_, std::vector<MyVariable> vars_) {
-        name = name_;
-        vars = vars_;
-    }
 
-    MyPredicateType GetType() const override { return FUNCTION; }
-};
 struct ITEConstraint : MyConstraint {
-    std::string result;
-    std::string condition;
-    std::string operand1;
-    std::string operand2;
+    MyVariable result;
+    MyVariable condition;
+    MyVariable operand1;
+    MyVariable operand2;
     ~ITEConstraint() override = default;
-    ITEConstraint(std::string result_, std::string condition_, std::string operand1_, std::string operand2_)
+    ITEConstraint(MyVariable result_, MyVariable condition_, MyVariable operand1_, MyVariable operand2_)
         : result(std::move(result_)), condition(std::move(condition_)), operand1(std::move(operand1_)), operand2(std::move(operand2_)) {}
 
-    std::string Print() const override { return result + "=ite(" + condition + "," + operand1 + "," + operand2 + ")"; }
+    std::string Print() const override { return result.name + "=ite(" + condition.name + "," + operand1.name + "," + operand2.name + ")"; }
 
     std::string GetSMT() const override {
-        return +"(= " + result + " (ite " + condition + " " + operand1 + " " + operand2 + " ))";
+        return +"(= " + result.name + " (ite " + condition.name + " " + operand1.name + " " + operand2.name + " ))";
     }
 
     MyPredicateType GetType() const override { return ITE; }
 };
 struct BinaryConstraint : MyConstraint {
-    std::string result;
-    std::string operand1;
+    MyVariable result;
+    MyVariable operand1;
     std::string sign;
-    std::string operand2;
-    virtual ~BinaryConstraint() {}
-    BinaryConstraint(std::string result_, std::string operand1_, std::string sign_, std::string operand2_) {
-        result = result_;
-        operand1 = operand1_;
-        sign = sign_;
-        operand2 = operand2_;
-    }
-    std::string Print() const override { return result + " = " + operand1 + " " + sign + " " + operand2; }
+    MyVariable operand2;
+    ~BinaryConstraint() override = default;
+    BinaryConstraint(MyVariable result, MyVariable operand1, std::string sign, MyVariable operand2)
+        : result(std::move(result)), operand1(std::move(operand1)), sign(std::move(sign)), operand2(std::move(operand2))
+    { }
+    std::string Print() const override { return result.name + " = " + operand1.name + " " + sign + " " + operand2.name; }
 
     std::string GetSMT() const override {
         if (sign == "!=") {
-            return "(= " + result + " (not (= " + operand1 + " " + operand2 + " )))";
+            return "(= " + result.name + " (not (= " + operand1.name + " " + operand2.name + " )))";
         } else {
-            return "(= " + result + " (" + sign + " " + operand1 + " " + operand2 + " ))";
+            return "(= " + result.name + " (" + sign + " " + operand1.name + " " + operand2.name + " ))";
         }
     }
 
     MyPredicateType GetType() const override { return BINARY; }
 };
 struct UnaryConstraint : MyConstraint {
-    std::string result;
-    std::string value;
-    virtual ~UnaryConstraint() {}
-    UnaryConstraint(std::string result_, std::string value_) {
-        result = result_;
-        value = value_;
-    }
-    std::string Print() const override { return result + " = " + value; }
+    MyVariable result;
+    MyVariable value;
+    ~UnaryConstraint() override = default;
+    UnaryConstraint(MyVariable result, MyVariable value) : result(std::move(result)), value(std::move(value)) {}
+    std::string Print() const override { return result.name + " = " + value.name; }
 
-    std::string GetSMT() const override { return "(= " + result + " " + value + " )"; }
+    std::string GetSMT() const override { return "(= " + result.name + " " + value.name + " )"; }
 
     MyPredicateType GetType() const override { return UNARY; }
 };
 struct ComparisonConstraint : MyConstraint {
-    std::string operand1;
-    std::string operand2;
+    MyVariable operand1;
+    MyVariable operand2;
     std::string sign;
-    virtual ~ComparisonConstraint() {}
-    ComparisonConstraint(std::string operand1_, std::string sign_, std::string operand2_) {
-        operand1 = operand1_;
-        operand2 = operand2_;
-        sign = sign_;
-    }
-    std::string Print() const override { return operand1 + sign + operand2; }
-    std::string GetSMT() const override { return "(" + sign + " " + operand1 + " " + operand2 + " )"; }
+    ~ComparisonConstraint() override = default;
+    ComparisonConstraint(MyVariable operand1, std::string sign, MyVariable operand2)
+        : operand1(std::move(operand1)), sign(std::move(sign)), operand2(std::move(operand2)) {}
+    std::string Print() const override { return operand1.name + sign + operand2.name; }
+    std::string GetSMT() const override { return "(" + sign + " " + operand1.name + " " + operand2.name + " )"; }
     MyPredicateType GetType() const override { return COMPARISON; }
 };
-struct LoadConstraint : MyConstraint {
-    std::string result;
-    std::string value;
-    virtual ~LoadConstraint() {}
-    LoadConstraint(std::string name_, std::string value_) {
-        result = name_;
-        value = value_;
-    }
-    std::string Print() const override { return result + " = " + value; }
-
-    std::string GetSMT() const override { return "(= " + result + " " + value + " )"; }
-
-    MyPredicateType GetType() const override { return LOAD; }
-};
 struct Equality : MyConstraint {
-    std::string result;
-    std::string value;
+    MyVariable lhs;
+    MyVariable rhs;
     ~Equality() override = default;
-    Equality(std::string result_, std::string value_) {
-        result = std::move(result_);
-        value = std::move(value_);
-    }
-    [[nodiscard]] std::string Print() const override { return result + " = " + value; }
+    Equality(MyVariable lhs, MyVariable rhs) : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+    [[nodiscard]] std::string Print() const override { return lhs.name + " = " + rhs.name; }
 
-    [[nodiscard]] std::string GetSMT() const override { return "(= " + result + " " + value + " )"; }
+    [[nodiscard]] std::string GetSMT() const override { return "(= " + lhs.name + " " + rhs.name + " )"; }
 
     [[nodiscard]] MyPredicateType GetType() const override { return EQUALITY; }
 };
@@ -232,6 +193,8 @@ struct Implication {
     Implication(Implication const & other) = delete;
     Implication & operator=(Implication const & other) = delete;
 };
+
+std::set<MyVariable> all_vars(Implication const & implication);
 
 enum class BasicBlockPredicateType {ENTRY, EXIT};
 
@@ -253,8 +216,6 @@ struct MyBasicBlock {
     std::string name;
     // Id of basic block
     std::uint8_t id;
-    // List of references to variables used in instructions of basic block and its predecessors
-    std::unordered_set<llvm::Value const *> vars;
     // List of ids of predecessors of basic block
     std::vector<std::uint8_t> predecessors;
     // List of ids of successors of basic block
@@ -292,6 +253,8 @@ struct MyFunctionInfo {
     llvm::Function const & llvm_function;
     // Error index
     int e_index;
+    // Liveness information
+    LivenessInfo liveness_info;
 
     MyFunctionInfo(llvm::Function const & function, std::string name, bool is_main)
         : name(std::move(name)), is_main_function(is_main), llvm_function(function), e_index(0) {}

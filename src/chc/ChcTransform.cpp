@@ -6,6 +6,7 @@
  */
 
 #include "ChcTransform.hpp"
+#include "utils/Liveness.hpp"
 
 #include <Exceptions.hpp>
 
@@ -37,7 +38,7 @@ private:
 
     Implication::Constraints transform_instructions(MyBasicBlock const & BB, MyFunctionInfo & function_info);
 
-    std::unique_ptr<LoadConstraint> transform_load_operand(Instruction const * I);
+    std::unique_ptr<Equality> transform_load_operand(Instruction const * I);
 
     std::unique_ptr<Equality> transform_store_operand(Instruction const * I);
 
@@ -123,16 +124,6 @@ MyVariable get_function_call_var(MyBasicBlock const & BB, int e_index, MyBasicBl
     }
 }
 
-// Set variable in head predicate as prime when assigned new value in constraint
-void set_prime_var_in_head(MyPredicate & head_predicate, std::string const & var_name) {
-    for (auto & var : head_predicate.vars) {
-        if (var.name == var_name) {
-            var.isPrime = true;
-            break;
-        }
-    }
-}
-
 // Get type of variable
 std::string get_type(Type const * type) {
     if (type->isIntegerTy()) {
@@ -143,26 +134,29 @@ std::string get_type(Type const * type) {
 }
 
 std::string convert_name_to_string(Value const * const value) {
-    std::string block_address;
-    raw_string_ostream string_stream(block_address);
-
+    std::string name;
+    raw_string_ostream string_stream(name);
     value->printAsOperand(string_stream, false);
-
-    return block_address;
+    return name;
 }
 
-// Convert operand to std::string, if negative string,
-// return as function (-) with positive value (e.g. -100 => (- 100))
-std::string convert_operand_to_string(Value const * value) {
-    if (get_type(value->getType()) == "Int") {
-        if (auto const * asConstant = dyn_cast<ConstantInt>(value)) {
-            auto const num = asConstant->getSExtValue();
-            if (num < 0) { return "(- " + std::to_string(num * -1) + ')'; }
-            return std::to_string(num);
+MyVariable convert_name_to_myvar(Value const * const value) {
+    return MyVariable::variable(convert_name_to_string(value), get_type(value->getType()));
+}
+
+MyVariable convert_operand_to_myvar(Value const * value) {
+    if (auto const * asConstant = dyn_cast<ConstantInt>(value)) {
+        auto type = get_type(value->getType());
+        auto const num = asConstant->getSExtValue();
+        if ( type == "Int") {
+            // FIXME: Store value directly, not string representation
+            auto name = num < 0 ? "(- " + std::to_string(num * -1) + ')' : std::to_string(num);
+            return MyVariable::constant(std::move(name));
+        } else if (type == "Bool") {
+            return MyVariable::constant(num != 0 ? "true" : "false");
         }
     }
-
-    return convert_name_to_string(value);
+    return convert_name_to_myvar(value);
 }
 
 // Create constraint for br instruction
@@ -170,9 +164,9 @@ std::unique_ptr<UnaryConstraint> transform_br(Instruction const * I, BasicBlock 
     // Instruction must have 3 operands to jump
     if (I->getNumOperands() != 3) { throw std::logic_error("Wrong instruction. Too few function operands."); }
 
-    std::string res = successor == I->getOperand(2) ? "true" : "false";
+    MyVariable res = MyVariable::constant(successor == I->getOperand(2) ? "true" : "false");
 
-    return std::make_unique<UnaryConstraint>(convert_name_to_string(I->getOperand(0)), res);
+    return std::make_unique<UnaryConstraint>(convert_name_to_myvar(I->getOperand(0)), res);
 }
 
 std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
@@ -183,12 +177,6 @@ std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
     return std::nullopt;
 }
 
-void add_variable(Value const * var, MyBasicBlock & my_block) {
-    // Skip labels and pointers
-    if (var->getType()->isLabelTy() or var->getType()->isPointerTy()) { return; }
-    my_block.vars.insert(var);
-}
-
 void set_basic_block_info(MyFunctionInfo * function_info) {
     for (auto & it : function_info->basic_blocks) {
         MyBasicBlock & BB = it.second;
@@ -196,26 +184,11 @@ void set_basic_block_info(MyFunctionInfo * function_info) {
 
         // Set Predecessors of blocks and variables from them
         for (auto pred : predecessors(block_link)) {
-            // Find predecessor id
             auto maybe_pred_id = get_block_id_by_link(pred, function_info->basic_blocks);
             if (maybe_pred_id.has_value()) {
                 auto pred_id = maybe_pred_id.value();
                 // Add predecessor
                 BB.predecessors.push_back(pred_id);
-
-                // Add new variables from predecessor
-                for (auto v : function_info->basic_blocks.at(pred_id).vars) {
-                    add_variable(v, BB);
-                }
-            }
-        }
-
-        // First basic block without predecessors load function arguments
-        if (predecessors(block_link).empty()) {
-            Function const & F = function_info->llvm_function;
-            // Load arguments as variables
-            for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
-                add_variable(arg, BB);
             }
         }
 
@@ -249,21 +222,9 @@ void set_basic_block_info(MyFunctionInfo * function_info) {
             if (I.getOpcode() == Instruction::Ret) {
                 if (not function_info->llvm_function.getReturnType()->isVoidTy()) {
                     auto o = I.getOperand(0);
-                    if (o->getValueID() == Value::ConstantIntVal) {
-                        function_info->return_value = MyVariable::constant(convert_operand_to_string(o));
-                    } else {
-                        function_info->return_value = MyVariable::variable(convert_name_to_string(o), get_type(o->getType()));
-                    }
+                    function_info->return_value = convert_operand_to_myvar(o);
                 }
                 BB.isLastBlock = true;
-            }
-
-            // Add instructions returning void
-            if (not I.getType()->isVoidTy()) { add_variable(&I, BB); }
-
-            // Add all variables from instruction
-            for (auto & o : I.operands()) {
-                add_variable(o, BB);
             }
         }
     }
@@ -273,6 +234,7 @@ MyFunctionInfo load_my_function_info(Function const & F) {
     MyFunctionInfo function_info = load_basic_info(F);
     function_info.basic_blocks = load_basic_blocks(F);
     set_basic_block_info(&function_info);
+    function_info.liveness_info = compute_liveness(F);
     return function_info;
 }
 
@@ -316,9 +278,6 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
             // Translate phi instructions
             for (auto && constraint : transform_phi_instructions(BB, successor)) {
-                // Set prime variables
-                set_prime_var_in_head(succ_predicate, constraint->result);
-                constraint->result = constraint->result + PRIME_SIGN;
                 implication.constraints.push_back(std::move(constraint));
             }
 
@@ -326,8 +285,8 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             if (BB.last_instruction != nullptr && BB.successors.size() > 0) {
                 if (BB.successors.size() == 2) {
                     auto br = transform_br(BB.last_instruction, successor.BB_link);
-                    if ((br->result == "true" && br->value == "false") ||
-                        (br->result == "false" && br->value == "true")) {
+                    if ((br->result.name == "true" && br->value.name == "false") ||
+                        (br->result.name == "false" && br->value.name == "true")) {
                         continue;
                         }
                     implication.constraints.push_back(std::move(br));
@@ -411,70 +370,6 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
         exit_predicate.vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
     }
 
-    std::unordered_set<std::string> prime_vars;
-
-    // Create prime variables in predicates when new assignment
-    for (auto & constraint : constraints) {
-
-        if (FunctionPredicate * fp = dynamic_cast<FunctionPredicate *>(constraint.get())) {
-
-            set_prime_var_in_head(exit_predicate, fp->changed_var);
-            prime_vars.insert(fp->changed_var);
-
-            // Set variables when assigned
-            for (unsigned int i = 0; i < fp->vars.size(); i++) {
-                if (prime_vars.find(fp->vars[i].name) != prime_vars.end()) { fp->vars[i].isPrime = true; }
-            }
-        } else if (BinaryConstraint * bc = dynamic_cast<BinaryConstraint *>(constraint.get())) {
-
-            // Set operands when assigned before
-            if (prime_vars.find(bc->operand1) != prime_vars.end()) { bc->operand1 = bc->operand1 + PRIME_SIGN; }
-            if (prime_vars.find(bc->operand2) != prime_vars.end()) { bc->operand2 = bc->operand2 + PRIME_SIGN; }
-
-            // Set assigned variable as prime in current constraint and head predicate
-            set_prime_var_in_head(exit_predicate, bc->result);
-            prime_vars.insert(bc->result);
-            bc->result = bc->result + PRIME_SIGN;
-        }
-
-        else if (UnaryConstraint * uc = dynamic_cast<UnaryConstraint *>(constraint.get())) {
-
-            // Set operands when assigned before
-            if (prime_vars.find(uc->value) != prime_vars.end()) { uc->value = uc->value + PRIME_SIGN; }
-
-            // Set assigned variable as prime in current constraint and head predicate
-            set_prime_var_in_head(exit_predicate, uc->result);
-            prime_vars.insert(uc->result);
-            uc->result = uc->result + PRIME_SIGN;
-        }
-
-        else if (ITEConstraint * ite = dynamic_cast<ITEConstraint *>(constraint.get())) {
-
-            // Set operands as prime when assigned before
-            if (prime_vars.find(ite->condition) != prime_vars.end()) { ite->condition = ite->condition + PRIME_SIGN; }
-            if (prime_vars.find(ite->operand1) != prime_vars.end()) { ite->operand1 = ite->operand1 + PRIME_SIGN; }
-            if (prime_vars.find(ite->operand2) != prime_vars.end()) { ite->operand2 = ite->operand2 + PRIME_SIGN; }
-
-            // Set assigned variable as prime in current constraint and head predicate
-            set_prime_var_in_head(exit_predicate, ite->result);
-            prime_vars.insert(ite->result);
-            ite->result = ite->result + PRIME_SIGN;
-        }
-
-        else if (LoadConstraint * lc = dynamic_cast<LoadConstraint *>(constraint.get())) {
-
-            // Set assigned variable as prime in current constraint and head predicate
-            set_prime_var_in_head(exit_predicate, lc->result);
-            prime_vars.insert(lc->result);
-            lc->result = lc->result + PRIME_SIGN;
-        }
-
-        else if (auto * sc = dynamic_cast<Equality *>(constraint.get())) {
-
-            // Set operand as prime when assigned before
-            if (prime_vars.find(sc->value) != prime_vars.end()) { sc->value = sc->value + PRIME_SIGN; }
-        }
-    }
     constraints.push_back(std::make_unique<MyPredicate>(entry_predicate));
     Implication implication(exit_predicate);
     implication.constraints = std::move(constraints);
@@ -494,24 +389,24 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
     if (!fn || fn->isDeclaration()) {
         if (function_name.find(UNSIGNED_UINT_FUNCTION, 0) != std::string::npos) {
 
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), ">=", "0"));
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), "<=", "4294967295"));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("0")));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), "<=", MyVariable::constant("4294967295")));
         } else if (function_name.find(UNSIGNED_SHORT_FUNCTION, 0) != std::string::npos) {
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), ">=", "(- 32768)"));
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), "<=", "32767"));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("(- 32768)")));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), "<=", MyVariable::constant("32767")));
         } else if (function_name.find(UNSIGNED_USHORT_FUNCTION, 0) != std::string::npos) {
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), ">=", "0"));
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), "<=", "65535"));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("0")));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), "<=", MyVariable::constant("65535")));
 
         } else if (function_name.find(UNSIGNED_UCHAR_FUNCTION, 0) != std::string::npos) {
 
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), ">=", "0"));
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), "<=", "255"));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("0")));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), "<=", MyVariable::constant("255")));
 
         } else if (function_name.find(UNSIGNED_CHAR_FUNCTION, 0) != std::string::npos) {
 
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), ">=", "(- 128)"));
-            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_string(I), "<=", "127"));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("(- 128)")));
+            result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), "<=", MyVariable::constant("127")));
 
         } else {
             // If no predefined function, ignore call and add true constraint
@@ -520,26 +415,16 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
         return result;
     }
 
-    auto predicate = std::make_unique<FunctionPredicate>(function_name);
+    auto predicate = std::make_unique<MyPredicate>(function_name);
 
     // Add parameters
     for (auto arg = call_inst->arg_begin(); arg != call_inst->arg_end(); ++arg) {
-        if (arg->get()->getValueID() != Value::ConstantIntVal) {
-            std::string var_name = convert_name_to_string(arg->get());
-            std::string var_type = get_type(arg->get()->getType());
-
-            predicate->vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
-        } else {
-            predicate->vars.push_back(MyVariable::constant(convert_operand_to_string(arg->get())));
-        }
+        predicate->vars.push_back(convert_operand_to_myvar(arg->get()));
     }
 
     // Add return variable
     if (!fn->getReturnType()->isVoidTy()) {
-        std::string var_name = convert_name_to_string(I);
-
-        predicate->vars.push_back(MyVariable::prime_variable(var_name, get_type(fn->getReturnType())));
-        predicate->changed_var = var_name;
+        predicate->vars.push_back(convert_name_to_myvar(I));
     }
 
     // Add variables for input error variable
@@ -601,21 +486,22 @@ std::unique_ptr<BinaryConstraint> transform_comparison(Instruction const * I) {
     auto * rhs = comparison->getOperand(1);
 
     // Get constant value as signed or unsigned based on type of comparison
-    auto asString = [&](Value * val) -> std::string {
+    auto as_my_var = [&](Value * val) -> MyVariable {
         if (auto asConstant = dyn_cast<ConstantInt>(val)) {
             if (comparison->isSigned()) {
                 auto value = asConstant->getSExtValue();
-                if (value < 0) { return "(- " + std::to_string(value * -1) + ')'; }
-                return std::to_string(value);
+                // FIXME!
+                if (value < 0) { return MyVariable::constant("(- " + std::to_string(value * -1) + ')'); }
+                return MyVariable::constant(std::to_string(value));
             } else {
                 auto value = asConstant->getZExtValue();
-                return std::to_string(value);
+                return MyVariable::constant(std::to_string(value));
             }
         }
-        return convert_name_to_string(val);
+        return convert_name_to_myvar(val);
     };
 
-    return std::make_unique<BinaryConstraint>(convert_name_to_string(comparison), asString(lhs), sign, asString(rhs));
+    return std::make_unique<BinaryConstraint>(convert_name_to_myvar(comparison), as_my_var(lhs), sign, as_my_var(rhs));
 }
 
 // Create binary constraint from binary instructions
@@ -654,46 +540,46 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
             throw UnsupportedFeature("Unknown binary instruction.");
     }
 
-    return std::make_unique<BinaryConstraint>(convert_name_to_string(I), convert_operand_to_string(I->getOperand(0)),
-                                              sign, convert_operand_to_string(I->getOperand(1)));
+    return std::make_unique<BinaryConstraint>(convert_name_to_myvar(I), convert_operand_to_myvar(I->getOperand(0)),
+                                              sign, convert_operand_to_myvar(I->getOperand(1)));
 }
 
 // Create constraint for zext instruction
 std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
-    MyVariable input = MyVariable::variable(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
-    MyVariable output = MyVariable::variable(convert_name_to_string(I), get_type(I->getType()));
+    MyVariable input = convert_operand_to_myvar(I->getOperand(0));
+    MyVariable output = convert_name_to_myvar(I);
 
     if (input.type == "Bool" && output.type == "Int") {
-        return std::make_unique<ITEConstraint>(output.name, input.name, "1", "0");
+        return std::make_unique<ITEConstraint>(output, input, MyVariable::constant("1"), MyVariable::constant("0"));
     } else {
-        return std::make_unique<UnaryConstraint>(output.name, input.name);
+        return std::make_unique<UnaryConstraint>(std::move(output), std::move(input));
     }
 }
 
 std::unique_ptr<MyConstraint> transform_select(SelectInst const * I) {
     return std::make_unique<ITEConstraint>(
-        convert_name_to_string(I),
-        convert_operand_to_string(I->getCondition()),
-        convert_operand_to_string(I->getTrueValue()),
-        convert_operand_to_string(I->getFalseValue())
+        convert_name_to_myvar(I),
+        convert_operand_to_myvar(I->getCondition()),
+        convert_operand_to_myvar(I->getTrueValue()),
+        convert_operand_to_myvar(I->getFalseValue())
     );
 }
 
 // Create constraint for trunc instruction
 std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
-    MyVariable input = MyVariable::variable(convert_name_to_string(I->getOperand(0)), get_type(I->getOperand(0)->getType()));
-    MyVariable output = MyVariable::variable(convert_name_to_string(I), get_type(I->getType()));
+    MyVariable input = convert_operand_to_myvar(I->getOperand(0));
+    MyVariable output = convert_name_to_myvar(I);
 
     if (input.type == "Int" && output.type == "Bool") {
-        return std::make_unique<BinaryConstraint>(output.name, input.name, "!=", "0");
+        return std::make_unique<BinaryConstraint>(output, input, "!=", MyVariable::constant("0"));
     } else {
-        return std::make_unique<UnaryConstraint>(output.name, input.name);
+        return std::make_unique<UnaryConstraint>(output, input);
     }
 }
 
 // Create equality constraint for sext instruction
 std::unique_ptr<UnaryConstraint> transform_sext(Instruction const * I) {
-    return std::make_unique<UnaryConstraint>(convert_name_to_string(I), convert_name_to_string(I->getOperand(0)));
+    return std::make_unique<UnaryConstraint>(convert_name_to_myvar(I), convert_name_to_myvar(I->getOperand(0)));
 }
 
 // Create constraint for logic instruction with boolean variables
@@ -711,7 +597,7 @@ std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction const * I)
 } // namespace
 
 // Create constraint for load instruction with global variable
-std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction const * I) {
+std::unique_ptr<Equality> Context::transform_load_operand(Instruction const * I) {
     assert(llvm::isa<GlobalVariable>(I->getOperand(0)));
     auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(0));
     if (not global_var) { throw std::logic_error("Unexpected operand of load instruction"); }
@@ -719,10 +605,11 @@ std::unique_ptr<LoadConstraint> Context::transform_load_operand(Instruction cons
     if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
     auto const & [name, index] = it->second;
 
-    auto result = convert_name_to_string(I);
-    auto value = name + "_" + std::to_string(index);
+    auto lhs = convert_name_to_myvar(I);
+    auto type = get_type(I->getType());
+    auto rhs = MyVariable::variable(name + "_" + std::to_string(index), type);
 
-    return std::make_unique<LoadConstraint>(std::move(result), std::move(value));
+    return std::make_unique<Equality>(std::move(lhs), std::move(rhs));
 }
 
 // Create constraint for store instruction with global variable
@@ -734,8 +621,8 @@ std::unique_ptr<Equality> Context::transform_store_operand(Instruction const * I
     if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
     auto & [name, index] = it->second;
     ++index;
-    return std::make_unique<Equality>(name + "_" + std::to_string(index),
-                                             convert_operand_to_string(I->getOperand(0)));
+    auto lhs = MyVariable::variable(name + "_" + std::to_string(index), get_type(global_var->getValueType()));
+    return std::make_unique<Equality>(std::move(lhs), convert_operand_to_myvar(I->getOperand(0)));
 }
 
 // Set variables for phi instruction, depending on label before
@@ -749,7 +636,7 @@ std::vector<std::unique_ptr<UnaryConstraint>> Context::transform_phi_instruction
             Value const * translation = I.DoPHITranslation(successor.BB_link, predecessor.BB_link);
 
             result.push_back(
-                std::make_unique<UnaryConstraint>(convert_name_to_string(&I), convert_operand_to_string(translation)));
+                std::make_unique<UnaryConstraint>(convert_name_to_myvar(&I), convert_operand_to_myvar(translation)));
         }
     }
     return result;
@@ -825,12 +712,30 @@ Implication::Constraints constraints_on_globals(MyFunctionInfo const & function_
     for (auto & [var, entry] : global_info) {
         auto & [name, index] = entry;
         ++index;
-        auto result = name + "_" + std::to_string(index);
-        auto value = function_info.is_main_function ? convert_operand_to_string(var->getInitializer()) : name;
-        constraints.push_back(std::make_unique<Equality>(result, value));
+        auto type = get_type(var->getValueType());
+        auto lhs = MyVariable::variable(name + "_" + std::to_string(index), type);
+        auto rhs = function_info.is_main_function ? convert_operand_to_myvar(var->getInitializer()) : MyVariable::variable(name, type);
+        constraints.push_back(std::make_unique<Equality>(lhs, rhs));
     }
     return constraints;
 }
+
+bool isRegisterValue(Value const  * V) {
+    return V and (isa<Instruction>(V) or isa<Argument>(V));
+}
+
+std::vector<PHINode const *> collectPhiNodes(BasicBlock const & BB) {
+    std::vector<PHINode const *> phis;
+    for (Instruction const & I : BB) {
+        if (auto * phi = dyn_cast<PHINode>(&I)) {
+            phis.push_back(phi);
+        } else {
+            break; // PHI nodes are always at the beginning
+        }
+    }
+    return phis;
+}
+
 } // namespace
 
 /// Transfer to first basic block, we only need to make sure we have the right values of global variables
@@ -850,14 +755,44 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, Basic
 
     // Convert variables
     std::vector<MyVariable> vars;
-    for (auto & v : BB.vars) {
-        if (v->getValueID() != Value::ConstantIntVal) {
-            std::string var_name = convert_name_to_string(v);
-            std::string var_type = get_type(v->getType());
+    auto const & live_variables = type == BasicBlockPredicateType::ENTRY
+                                ? function_info.liveness_info.live_in.at(BB.BB_link)
+                                : function_info.liveness_info.live_out.at(BB.BB_link);
 
-            vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
+    auto processRegisterValue = [&](Value const * v) {
+        assert(isRegisterValue(v));
+        vars.push_back(convert_name_to_myvar(v));
+    };
+    // Function arguments need to be carried along
+    for (auto const & arg : function_info.llvm_function.args()) {
+        if (live_variables.count(&arg) == 0) {
+            processRegisterValue(&arg);
         }
     }
+
+    for (auto const & v : live_variables) {
+        processRegisterValue(v);
+    }
+
+    // Phi values must be part of the entry predicates
+    if (type == BasicBlockPredicateType::ENTRY) {
+        for (auto const * phi_value : collectPhiNodes(*BB.BB_link)) {
+            processRegisterValue(phi_value);
+        }
+    }
+    // Branching value must be part of the exit predicates
+    if (type == BasicBlockPredicateType::EXIT) {
+        Instruction const * terminator = BB.BB_link->getTerminator();
+        if (auto * branch = dyn_cast<BranchInst>(terminator); branch and branch->isConditional()) {
+            Value const * condition = branch->getCondition();
+            if (isRegisterValue(condition)) { processRegisterValue(condition); }
+        } else if (auto const * ret = dyn_cast<ReturnInst>(terminator)) {
+            if (Value const * ret_value = ret->getReturnValue(); isRegisterValue(ret_value)) {
+                processRegisterValue(ret_value);
+            }
+        }
+    }
+
     return {BB.name + "_" + to_string(type), vars};
 }
 
@@ -870,12 +805,7 @@ MyPredicate Context::get_function_predicate(MyFunctionInfo const & function_info
 
     // Add parameters
     for (auto arg = F.arg_begin(); arg != F.arg_end(); ++arg) {
-        if (arg->getValueID() != Value::ConstantIntVal) {
-            std::string var_name = convert_name_to_string(arg);
-            std::string var_type = get_type(arg->getType());
-
-            predicate.vars.push_back(MyVariable::variable(std::move(var_name), std::move(var_type)));
-        }
+        predicate.vars.push_back(convert_name_to_myvar(arg));
     }
 
     // Add return value
