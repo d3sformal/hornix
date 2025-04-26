@@ -9,6 +9,7 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Transforms/Utils/Mem2Reg.h"
+#include "llvm/Transforms/Utils/InstructionNamer.h"
 
 using namespace llvm;
 
@@ -33,6 +34,7 @@ std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     // Build a function pass manager that runs mem2reg
     FunctionPassManager FPM;
     FPM.addPass(PromotePass()); // mem2reg
+    FPM.addPass(InstructionNamerPass()); // instnamer, should always be last
 
     // Run the function pass manager over each function
     for (Function & f : *module) {
