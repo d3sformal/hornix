@@ -30,7 +30,7 @@ public:
     using GlobalInfo = llvm::DenseMap<GlobalVariable const *, std::pair<std::string, int>>;
 
 private:
-    void add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info);
+    void add_global_variables(std::vector<MyVariable> & vars, MyFunctionInfo const & function_info);
 
     Implication::Constraints transform_function_call(Instruction const * I, MyFunctionInfo & function_info);
 
@@ -261,7 +261,6 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
         // Create implications for transfers to successors
         for (auto & succ : BB.successors) {
             auto current_exit_predicate = create_basic_block_predicate(BB, BasicBlockPredicateType::EXIT, function_info);
-            add_global_variables(current_exit_predicate, function_info);
 
             auto const & successor = function_info.basic_blocks.at(succ);
             auto succ_predicate = create_basic_block_predicate(successor, BasicBlockPredicateType::ENTRY, function_info);
@@ -293,7 +292,6 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
                 }
             }
 
-            if (not successor.isFalseBlock) { add_global_variables(succ_predicate, function_info); }
             implication.head = succ_predicate;
             clauses.push_back(std::move(implication));
         }
@@ -304,7 +302,6 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             Implication implication(fail);
 
             MyPredicate current_exit_predicate = create_basic_block_predicate(BB, BasicBlockPredicateType::EXIT, function_info);
-            add_global_variables(current_exit_predicate, function_info);
             current_exit_predicate.vars.push_back(MyVariable::constant("true"));
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
@@ -318,7 +315,6 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             auto implication = Implication(fun_predicate);
 
             MyPredicate current_exit_predicate = create_basic_block_predicate(BB, BasicBlockPredicateType::EXIT, function_info);
-            add_global_variables(current_exit_predicate, function_info);
             if (BB.isFunctionCalled) { current_exit_predicate.vars.push_back(MyVariable::constant("false")); }
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
@@ -340,15 +336,16 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
     return clauses;
 }
 
-// Add global variables to basic block predicate
-void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const & function_info) {
+void Context::add_global_variables(std::vector<MyVariable> & vars, MyFunctionInfo const & function_info) {
     for (auto const & [llvm_global, entry] : global_vars) {
         auto const & [name, index] = entry;
+        auto type_name = get_type(llvm_global->getValueType());
         if (not function_info.is_main_function) {
-            // No main function needs input value of global variable
-            predicate.vars.push_back(MyVariable::variable(name, "Int"));
+            // Global value at the entry point of the function
+            vars.push_back(MyVariable::variable(name, type_name));
         }
-        predicate.vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
+        // Current value of the global
+        vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), type_name));
     }
 }
 
@@ -358,12 +355,10 @@ void Context::add_global_variables(MyPredicate & predicate, MyFunctionInfo const
 Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInfo & function_info) {
 
     MyPredicate entry_predicate = create_basic_block_predicate(BB, BasicBlockPredicateType::ENTRY, function_info);
-    add_global_variables(entry_predicate, function_info);
 
     Implication::Constraints constraints = transform_instructions(BB, function_info);
 
     auto exit_predicate = create_basic_block_predicate(BB, BasicBlockPredicateType::EXIT, function_info);
-    add_global_variables(exit_predicate, function_info);
 
     // Add last output error variable if some function called in BB
     if (BB.isFunctionCalled) {
@@ -742,7 +737,6 @@ std::vector<PHINode const *> collectPhiNodes(BasicBlock const & BB) {
 Implication Context::get_entry_block_implication(MyFunctionInfo const & function_info, MyBasicBlock const & BB1) {
     auto constraints = constraints_on_globals(function_info, global_vars);
     auto BB1_predicate = create_basic_block_predicate(BB1, BasicBlockPredicateType::ENTRY, function_info);
-    if (!BB1.isFalseBlock) { add_global_variables(BB1_predicate, function_info); }
     return {std::move(BB1_predicate), std::move(constraints)};
 }
 
@@ -793,6 +787,8 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, Basic
         }
     }
 
+    add_global_variables(vars, function_info);
+
     return {BB.name + "_" + to_string(type), vars};
 }
 
@@ -816,9 +812,7 @@ MyPredicate Context::get_function_predicate(MyFunctionInfo const & function_info
         predicate.vars.push_back(e_in);
         predicate.vars.push_back(e_out);
     }
-
-    add_global_variables(predicate, function_info);
-
+    add_global_variables(predicate.vars, function_info);
     return predicate;
 }
 
