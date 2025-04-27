@@ -33,7 +33,7 @@ const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
 const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
 const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION };
+enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND };
 
 struct MyVariable {
     std::string name{};
@@ -177,6 +177,38 @@ struct Equality : MyConstraint {
     [[nodiscard]] std::string GetSMT() const override { return "(= " + lhs.name + " " + rhs.name + " )"; }
 
     [[nodiscard]] MyPredicateType GetType() const override { return EQUALITY; }
+};
+
+struct Not : MyConstraint {
+    std::unique_ptr<MyConstraint> inner;
+    ~Not() override = default;
+    explicit Not(std::unique_ptr<MyConstraint> inner) : inner(std::move(inner)) {}
+
+    [[nodiscard]] std::string Print() const override { return "not(" + inner->Print() + ")"; }
+
+    [[nodiscard]] std::string GetSMT() const override { return "(not " + inner->GetSMT() + ")"; }
+
+    [[nodiscard]] MyPredicateType GetType() const override { return NOT; }
+};
+
+struct And : MyConstraint {
+    std::vector<std::unique_ptr<MyConstraint>> args;
+    ~And() override = default;
+    explicit And(std::vector<std::unique_ptr<MyConstraint>> args) : args(std::move(args)) {}
+
+    // [[nodiscard]] std::string Print() const override { return "not(" + inner->Print() + ")"; }
+
+    [[nodiscard]] std::string GetSMT() const override {
+        std::stringstream ss;
+        ss << "(and ";
+        for (auto const & arg : args) {
+            ss << arg->GetSMT();
+        }
+        ss << ')';
+        return ss.str();
+    }
+
+    [[nodiscard]] MyPredicateType GetType() const override { return AND; }
 };
 
 struct Implication {
