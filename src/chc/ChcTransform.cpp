@@ -146,16 +146,6 @@ MyVariable convert_operand_to_myvar(Value const * value) {
     return convert_name_to_myvar(value);
 }
 
-// Create constraint for br instruction
-std::unique_ptr<UnaryConstraint> transform_br(Instruction const * I, BasicBlock const * successor) {
-    // Instruction must have 3 operands to jump
-    if (I->getNumOperands() != 3) { throw std::logic_error("Wrong instruction. Too few function operands."); }
-
-    MyVariable res = MyVariable::constant(successor == I->getOperand(2) ? "true" : "false");
-
-    return std::make_unique<UnaryConstraint>(convert_name_to_myvar(I->getOperand(0)), res);
-}
-
 std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
                                                 MyFunctionInfo::BasicBlocks const & my_blocks) {
     for (auto const & [id, my_block] : my_blocks) {
@@ -202,9 +192,6 @@ void set_basic_block_info(MyFunctionInfo * function_info) {
                 }
             }
 
-            // Remember last br instruction (should be only one)
-            if (I.getOpcode() == Instruction::Br) { BB.last_instruction = &I; }
-
             // Remember return value of function
             if (I.getOpcode() == Instruction::Ret) {
                 if (not function_info->llvm_function.getReturnType()->isVoidTy()) {
@@ -223,6 +210,41 @@ MyFunctionInfo load_my_function_info(Function const & F) {
     set_basic_block_info(&function_info);
     function_info.liveness_info = compute_liveness(F);
     return function_info;
+}
+
+// Create constraint for br instruction
+std::unique_ptr<MyConstraint> get_transition_constraint(Instruction const * I, BasicBlock const * successor) {
+    if (I->getOpcode() == Instruction::Br) {
+        if (I->getNumOperands() == 1) { return nullptr; } // Unconditional jump
+        if (I->getNumOperands() != 3) { throw std::logic_error("Wrong instruction. Too few function operands."); }
+        MyVariable res = MyVariable::constant(successor == I->getOperand(2) ? "true" : "false");
+        return std::make_unique<Equality>(convert_name_to_myvar(I->getOperand(0)), res);
+    }
+    if (I->getOpcode() == Instruction::Switch) {
+        SwitchInst const * switch_inst = dyn_cast<SwitchInst>(I);
+        if (switch_inst->getDefaultDest() == successor) {
+            // TODO: We could detect if the cases are a continuous range and use simpler condition here
+            Implication::Constraints cases_constraints;
+            auto condition_var = convert_name_to_myvar(switch_inst->getCondition());
+            for (auto const & switch_case : switch_inst->cases()) {
+                cases_constraints.push_back(std::make_unique<Not>(std::make_unique<Equality>(
+                    condition_var,
+                    convert_operand_to_myvar(switch_case.getCaseValue())
+                    )));
+            }
+            return std::make_unique<And>(std::move(cases_constraints));
+        }
+        for (auto const & switch_case : switch_inst->cases()) {
+            if (switch_case.getCaseSuccessor() == successor) {
+                return std::make_unique<Equality>(
+                    convert_name_to_myvar(switch_inst->getCondition()),
+                    convert_operand_to_myvar(switch_case.getCaseValue())
+                );
+            }
+        }
+        throw std::logic_error("Error in processing switch");
+    }
+    throw UnsupportedFeature("Unknown terminator instruction!");
 }
 
 } // namespace
@@ -267,15 +289,12 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
                 implication.constraints.push_back(std::move(constraint));
             }
 
-            // Branch predicate if 2 successors
-            if (BB.last_instruction != nullptr && BB.successors.size() > 0) {
-                if (BB.successors.size() == 2) {
-                    auto br = transform_br(BB.last_instruction, successor.BB_link);
-                    if ((br->result.name == "true" && br->value.name == "false") ||
-                        (br->result.name == "false" && br->value.name == "true")) {
-                        continue;
-                        }
-                    implication.constraints.push_back(std::move(br));
+            // Transition constraint
+            if (BB.successors.size() > 0) {
+                if (auto const * terminator = BB.BB_link->getTerminator()) {
+                    if (auto transition_constraint = get_transition_constraint(terminator, successor.BB_link)) {
+                        implication.constraints.push_back(std::move(transition_constraint));
+                    }
                 }
             }
 
@@ -639,6 +658,7 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
             case Instruction::PHI:
             case Instruction::Ret:
             case Instruction::Unreachable:
+            case Instruction::Switch:
                 break;
             // Instructions with 1 constraint
             case Instruction::ICmp:
@@ -682,7 +702,7 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
                 break;
             }
             default:
-                throw UnsupportedFeature("Not implemented instruction");
+                throw UnsupportedFeature("Not implemented instruction: " + std::string(I.getOpcodeName()));
         }
     }
     return result;

@@ -54,7 +54,7 @@ inline bool operator<(MyVariable const & first, MyVariable const & second) { ret
 
 struct MyConstraint {
     virtual ~MyConstraint() {}
-    virtual std::string Print() const = 0;
+    virtual std::string Print() const { throw std::logic_error("Missing implementation of Print!"); }
     virtual MyPredicateType GetType() const = 0;
     virtual std::string GetSMT() const = 0;
 };
@@ -196,8 +196,6 @@ struct And : MyConstraint {
     ~And() override = default;
     explicit And(std::vector<std::unique_ptr<MyConstraint>> args) : args(std::move(args)) {}
 
-    // [[nodiscard]] std::string Print() const override { return "not(" + inner->Print() + ")"; }
-
     [[nodiscard]] std::string GetSMT() const override {
         std::stringstream ss;
         ss << "(and ";
@@ -252,8 +250,6 @@ struct MyBasicBlock {
     std::vector<std::uint8_t> predecessors;
     // List of ids of successors of basic block
     std::vector<std::uint8_t> successors;
-    // Reference to last br instruction of basic block
-    llvm::Instruction const * last_instruction;
     // True if block calls assert function and fails
     bool isFalseBlock;
     // True if it contains return instruction
@@ -265,7 +261,6 @@ struct MyBasicBlock {
         : BB_link(BB_link_),
           name(std::move(name_)),
           id(id_),
-          last_instruction(nullptr),
           isFalseBlock(false),
           isLastBlock(false),
           isFunctionCalled(false) {}
