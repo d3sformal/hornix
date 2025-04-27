@@ -111,19 +111,6 @@ MyFunctionInfo::BasicBlocks load_basic_blocks(Function const & F) {
     return basic_blocks;
 }
 
-// Return variable to for end of the predicate if function is called in basic block
-MyVariable get_function_call_var(MyBasicBlock const & BB, int e_index, MyBasicBlock const & successor) {
-    if (BB.last_instruction != nullptr && BB.successors.size() > 0) {
-        if (BB.successors.size() != 2 || successor.BB_link == BB.last_instruction->getOperand(2)) {
-            return MyVariable::constant("false");
-        } else {
-            return MyVariable::variable("e" + std::to_string(e_index), "Bool");
-        }
-    } else {
-        return MyVariable::constant("false");
-    }
-}
-
 // Get type of variable
 std::string get_type(Type const * type) {
     if (type->isIntegerTy()) {
@@ -269,7 +256,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             Implication implication(succ_predicate);
 
             if (BB.isFunctionCalled) {
-                current_exit_predicate.vars.push_back(get_function_call_var(BB, function_info.e_index, successor));
+                current_exit_predicate.vars.push_back(MyVariable::constant("false"));
             }
 
             // Add current BB exit predicate
