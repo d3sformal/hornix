@@ -218,7 +218,7 @@ std::unique_ptr<MyConstraint> get_transition_constraint(Instruction const * I, B
         if (I->getNumOperands() == 1) { return nullptr; } // Unconditional jump
         if (I->getNumOperands() != 3) { throw std::logic_error("Wrong instruction. Too few function operands."); }
         MyVariable res = MyVariable::constant(successor == I->getOperand(2) ? "true" : "false");
-        return std::make_unique<Equality>(convert_name_to_myvar(I->getOperand(0)), res);
+        return std::make_unique<Equality>(convert_operand_to_myvar(I->getOperand(0)), res);
     }
     if (I->getOpcode() == Instruction::Switch) {
         SwitchInst const * switch_inst = dyn_cast<SwitchInst>(I);
