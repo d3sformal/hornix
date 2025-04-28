@@ -8,6 +8,7 @@
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Transforms/Scalar/InstSimplifyPass.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Utils/Mem2Reg.h"
 #include "llvm/Transforms/Utils/InstructionNamer.h"
@@ -36,6 +37,7 @@ std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     FunctionPassManager FPM;
     FPM.addPass(PromotePass()); // mem2reg
     FPM.addPass(SimplifyCFGPass()); //simplifycfg
+    FPM.addPass(InstSimplifyPass()); //instsimplify
     FPM.addPass(InstructionNamerPass()); // instnamer, should always be last
 
     // Run the function pass manager over each function
