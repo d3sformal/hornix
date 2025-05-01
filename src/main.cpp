@@ -10,6 +10,7 @@
 #include "chc/Backend.hpp"
 #include "chc/ChcTransform.hpp"
 #include "chc/SMTOut.hpp"
+#include "utils/ScopeGuard.hpp"
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -111,15 +112,10 @@ std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path,
     }
     auto const ir_file = tmp_dir / "output.ll";
     std::string const command = clang_executable.string() + " -Xclang -disable-O0-optnone -S -emit-llvm -o " + ir_file.string() + " " + path.string() + " 2> /dev/null";
-    // TODO: Refactor out of here
-    struct Guard {
-        fs::path path_to_delete;
-        ~Guard() {
-            std::error_code ec;
-            fs::remove(path_to_delete, ec);
-        }
-    } guard;
-    guard.path_to_delete = ir_file;
+    ScopeGuard guard([ir_file] {
+        std::error_code ec;
+        fs::remove(ir_file, ec);
+    });
     int status = std::system(command.c_str());
     if (WIFEXITED(status)) {
         int const exitCode = WEXITSTATUS(status);
