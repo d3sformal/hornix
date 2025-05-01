@@ -40,6 +40,7 @@ public:
     static const std::string SOLVER;
     static const std::string SOLVER_ARGS;
     static const std::string SOLVER_DIR;
+    static const std::string CLANG_DIR;
 };
 
 Options parse(int argc, char * argv[]);

@@ -25,6 +25,7 @@ void printUsage() {
         "--solver <solver>          Horn solver to run (default: z3)\n"
         "--solver-dir='<dir>'       Directory with the chosen solver's executable\n"
         "--solver-args='<args>'     Arguments to pass to the chosen solver\n"
+        "--clang-dir='<dir>'        Directory with the clang executable\n"
         ;
     std::cout << std::flush;
 }
@@ -42,6 +43,7 @@ const std::string Options::PRINT_IR = "print-ir";
 const std::string Options::SOLVER = "solver";
 const std::string Options::SOLVER_ARGS = "solver-args";
 const std::string Options::SOLVER_DIR = "solver-dir";
+const std::string Options::CLANG_DIR = "clang-dir";
 
 Options parse(int argc, char ** argv) {
 
@@ -59,6 +61,7 @@ Options parse(int argc, char ** argv) {
             {Options::SOLVER.c_str(), required_argument, nullptr, 0},
             {Options::SOLVER_DIR.c_str(), required_argument, nullptr, 0},
             {Options::SOLVER_ARGS.c_str(), required_argument, nullptr, 0},
+            {Options::CLANG_DIR.c_str(), required_argument, nullptr, 0},
             {"version", no_argument, &printVersion, 1},
             {0, 0, 0, 0}
         };
@@ -83,6 +86,9 @@ Options parse(int argc, char ** argv) {
                 }
                 if (strcmp(long_options[option_index].name, Options::SOLVER_ARGS.c_str()) == 0) {
                     res.addOption(Options::SOLVER_ARGS, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::CLANG_DIR.c_str()) == 0) {
+                    res.addOption(Options::CLANG_DIR, optarg);
                 }
                 break;
             case 'h':

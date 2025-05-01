@@ -22,19 +22,40 @@
 using namespace hornix;
 namespace fs = std::filesystem;
 
+struct Context {
+    llvm::LLVMContext context;
+    llvm::SMDiagnostic err;
+
+    std::unique_ptr<llvm::Module> module_from_ir_file(fs::path const & path) {
+        std::string path_as_string = path.string();
+        llvm::StringRef filename = path_as_string;
+        return llvm::parseIRFile(filename, err, context);
+    }
+
+    std::unique_ptr<llvm::Module> module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint);
+};
+
+
+
 int main(int argc, char * argv[]) {
 
     Options options = parse(argc, argv);
+    Context context;
     assert(options.hasOption(Options::INPUT_FILE));
-    std::string path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal().string();
-    llvm::StringRef filename = path;
-
-    llvm::LLVMContext context;
-    llvm::SMDiagnostic err;
-    std::unique_ptr<llvm::Module> module = llvm::parseIRFile(filename, err, context);
+    auto path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal();
+    auto module = [&]() -> std::unique_ptr<llvm::Module> {
+        auto extension = path.extension().string();
+        if (extension == ".ll")
+            return context.module_from_ir_file(path);
+        if (extension == ".c") {
+            return context.module_from_c_file(path, options.getOption(Options::CLANG_DIR));
+        }
+        llvm::errs() << "Unrecognized extension!\n";
+        exit(1);
+    }();
 
     if (not module) {
-        err.print("hornix", llvm::errs());
+        context.err.print("hornix", llvm::errs());
         return 1;
     }
 
@@ -69,4 +90,45 @@ int main(int argc, char * argv[]) {
         std::cerr << problem.what() << std::endl;
         return 1;
     }
+}
+
+std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint) {
+    auto clang_executable = [&]() -> fs::path {
+        if (compiler_hint.has_value()) {
+            auto clang_path = compiler_hint.value();
+            clang_path.append(std::string("clang"));
+            if (fs::exists(clang_path)) { return clang_path; }
+        }
+        // Hint did not work, try to locate on PATH
+        return "clang";
+    }();
+    // Prepare temporary directory for the `.ll` file
+    std::error_code ec;
+    auto tmp_dir = fs::temp_directory_path(ec);
+    if (tmp_dir.empty()) {
+        llvm::errs() << "Error accessing temporary directory when attempting to compile the source file!\n";
+        return nullptr;
+    }
+    auto const ir_file = tmp_dir / "output.ll";
+    std::string const command = clang_executable.string() + " -Xclang -disable-O0-optnone -S -emit-llvm -o " + ir_file.string() + " " + path.string() + " 2> /dev/null";
+    // TODO: Refactor out of here
+    struct Guard {
+        fs::path path_to_delete;
+        ~Guard() {
+            std::error_code ec;
+            fs::remove(path_to_delete, ec);
+        }
+    } guard;
+    guard.path_to_delete = ir_file;
+    int status = std::system(command.c_str());
+    if (WIFEXITED(status)) {
+        int const exitCode = WEXITSTATUS(status);
+        if (exitCode == 0) {
+            return module_from_ir_file(ir_file);
+        }
+        llvm::errs() << "Clang invocation did not succeed! Exit code: " << exitCode << '\n';
+        return nullptr;
+    }
+    llvm::errs() << "Error when trying to call clang!\n";
+    return nullptr;
 }
