@@ -36,14 +36,23 @@ struct Context {
     std::unique_ptr<llvm::Module> module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint);
 };
 
+void fatalError(std::string const & message) {
+    llvm::errs().changeColor(llvm::raw_ostream::RED, true);
+    llvm::errs() << "ERROR: ";
+    llvm::errs().resetColor();
+    llvm::errs() << message << '\n';
+    exit(1);
+}
 
 
 int main(int argc, char * argv[]) {
-
     Options options = parse(argc, argv);
     Context context;
     assert(options.hasOption(Options::INPUT_FILE));
     auto path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal();
+    if (not fs::exists(path)) {
+        fatalError("Input file does not exist: " + path.string());
+    }
     auto module = [&]() -> std::unique_ptr<llvm::Module> {
         auto extension = path.extension().string();
         if (extension == ".ll")
@@ -51,8 +60,8 @@ int main(int argc, char * argv[]) {
         if (extension == ".c") {
             return context.module_from_c_file(path, options.getOption(Options::CLANG_DIR));
         }
-        llvm::errs() << "Unrecognized extension!\n";
-        exit(1);
+        fatalError("Unrecognized extension: " + extension);
+        llvm_unreachable("Fatal error must exit!");
     }();
 
     if (not module) {
