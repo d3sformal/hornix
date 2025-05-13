@@ -7,6 +7,7 @@
 #include "Liveness.hpp"
 
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/Instructions.h"
 
 namespace hornix {
 
@@ -17,10 +18,13 @@ auto compute_usedef(BasicBlock const & BB) {
     ValueSet def;
     ValueSet use;
     for (Instruction const & I : BB) {
-        for (Value * Op : I.operands()) {
-            if (isa<Instruction>(Op) or isa<Argument>(Op)) {
-                if (!def.count(Op)) {
-                    use.insert(Op);
+        // We do not consider PHI arguments as used in this block, they are specific to the corresponding transition
+        if (I.getOpcode() != Instruction::PHI) {
+            for (Value * Op : I.operands()) {
+                if (isa<Instruction>(Op) or isa<Argument>(Op)) {
+                    if (!def.count(Op)) {
+                        use.insert(Op);
+                    }
                 }
             }
         }
@@ -29,6 +33,27 @@ auto compute_usedef(BasicBlock const & BB) {
     }
     return std::make_pair(use, def);
 }
+
+using PhiInfo = std::map<BasicBlock const *, std::vector<Value const *>>;
+PhiInfo compute_phi_info(Function const & F) {
+    PhiInfo phi_info;
+    for (BasicBlock const & BB : F) {
+        phi_info[&BB];
+        for (Instruction const & I : BB) {
+            if (I.getOpcode() != Instruction::PHI) { break; }
+            auto const * phi_inst = dyn_cast<PHINode>(&I);
+            for (auto const & value : phi_inst->incoming_values()) {
+                if (isa<Instruction>(value)) {
+                    auto const * incoming_block = phi_inst->getIncomingBlock(value);
+                    phi_info.at(incoming_block).push_back(value);
+                }
+            }
+        }
+    }
+    return phi_info;
+}
+
+
 } // namespace
 
 LivenessInfo compute_liveness(Function const & F) {
@@ -40,6 +65,8 @@ LivenessInfo compute_liveness(Function const & F) {
         USE[&BB] = std::move(use);
         DEF[&BB] = std::move(def);
     }
+    // Step 2: Remember outgoing values to phi instructions
+    auto phiInfo = compute_phi_info(F);
 
     BlockLiveness IN, OUT;
 
@@ -49,6 +76,9 @@ LivenessInfo compute_liveness(Function const & F) {
 
         for (BasicBlock const & BB : llvm::reverse(F)) {
             ValueSet newOut;
+            for (auto const & entry : phiInfo.at(&BB)) {
+                newOut.insert(entry);
+            }
             for (BasicBlock const * Succ : llvm::successors(&BB)) {
                 ValueSet & inSucc = IN[Succ];
                 newOut.insert(inSucc.begin(), inSucc.end());
