@@ -38,7 +38,7 @@ struct Context {
 
 void fatalError(std::string const & message) {
     llvm::errs().changeColor(llvm::raw_ostream::RED, true);
-    llvm::errs() << "ERROR: ";
+    llvm::errs() << "[ERROR] ";
     llvm::errs().resetColor();
     llvm::errs() << message << '\n';
     exit(1);
