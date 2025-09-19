@@ -18,11 +18,7 @@ add_definitions(${LLVM_DEFINITIONS_LIST})
 # Link against namespaced LLVM targets (modern way)
 target_link_libraries(hornix
   PRIVATE
-    LLVMCore
-    LLVMSupport
-    LLVMIRReader
-    LLVMPasses
-    LLVMScalarOpts
+    LLVM
 )
 
 target_include_directories(hornix
