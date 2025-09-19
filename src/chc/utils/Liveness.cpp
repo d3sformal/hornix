@@ -45,7 +45,7 @@ PhiInfo compute_phi_info(Function const & F) {
             for (auto const & value : phi_inst->incoming_values()) {
                 if (isa<Instruction>(value)) {
                     auto const * incoming_block = phi_inst->getIncomingBlock(value);
-                    phi_info.at(incoming_block).push_back(value);
+                    phi_info[incoming_block].push_back(value);
                 }
             }
         }
