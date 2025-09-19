@@ -20,8 +20,8 @@ namespace hornix {
 SolverContext SolverContext::z3_default() {
     return {
     .solver = "z3",
+    .solver_dir = std::nullopt,
     .args = {},
-    .solver_dir = std::nullopt
     };
 }
 
