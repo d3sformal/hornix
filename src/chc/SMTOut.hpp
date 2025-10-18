@@ -35,6 +35,8 @@ private:
         }
     }
 
+    std::string toSMTLibType(BitvectorType const & bvtype);
+
     int smt_quantifiers(Implication const & implication, int indent);
 
     void print_header() const;

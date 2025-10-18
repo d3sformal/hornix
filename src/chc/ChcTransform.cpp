@@ -112,10 +112,10 @@ MyFunctionInfo::BasicBlocks load_basic_blocks(Function const & F) {
 }
 
 // Get type of variable
-std::string get_type(Type const * type) {
+BitvectorType get_type(Type const * type) {
     if (type->isIntegerTy()) {
         auto w = cast<IntegerType>(type)->getBitWidth();
-        return w == 1 ? "Bool" : "Int";
+        return BitvectorType::make(w);
     }
     throw UnsupportedFeature("Unknown type of variable.");
 }
@@ -135,13 +135,13 @@ MyVariable convert_operand_to_myvar(Value const * value) {
     if (auto const * asConstant = dyn_cast<ConstantInt>(value)) {
         auto type = get_type(value->getType());
         auto const num = asConstant->getSExtValue();
-        if ( type == "Int") {
+        if (type.size() != 1) {
             // FIXME: Store value directly, not string representation
             auto name = num < 0 ? "(- " + std::to_string(num * -1) + ')' : std::to_string(num);
             return MyVariable::constant(std::move(name));
-        } else if (type == "Bool") {
-            return MyVariable::constant(num != 0 ? "true" : "false");
         }
+        assert(type.size() == 1);
+        return MyVariable::constant(num != 0 ? "true" : "false");
     }
     return convert_name_to_myvar(value);
 }
@@ -246,6 +246,12 @@ std::unique_ptr<MyConstraint> get_transition_constraint(Instruction const * I, B
     }
     throw UnsupportedFeature("Unknown terminator instruction!");
 }
+
+MyVariable makeErrorVariable(std::string name) {
+    return MyVariable::variable(std::move(name), BitvectorType::make(1));
+}
+
+bool isBoolLike(BitvectorType const & bvtype) { return bvtype.size() == 1; }
 
 } // namespace
 
@@ -368,7 +374,7 @@ Implication Context::create_entry_to_exit(MyBasicBlock const & BB, MyFunctionInf
 
     // Add last output error variable if some function called in BB
     if (BB.isFunctionCalled) {
-        exit_predicate.vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
+        exit_predicate.vars.push_back(makeErrorVariable("e" + std::to_string(function_info.e_index)));
     }
 
     constraints.push_back(std::make_unique<MyPredicate>(entry_predicate));
@@ -432,19 +438,20 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
     if (function_info.e_index == 0) {
         predicate->vars.push_back(MyVariable::constant("false"));
     } else {
-        predicate->vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
+        predicate->vars.push_back(makeErrorVariable("e" + std::to_string(function_info.e_index)));
     }
 
     // Add variables for output error variable
     ++function_info.e_index;
-    predicate->vars.push_back(MyVariable::variable("e" + std::to_string(function_info.e_index), "Bool"));
+    predicate->vars.push_back(makeErrorVariable("e" + std::to_string(function_info.e_index)));
 
     // Add global variables input and output values
     for (auto & [var, entry] : global_vars) {
         auto & [name, index] = entry;
-        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
+        auto bvtype = get_type(var->getValueType());
+        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), bvtype));
         index++;
-        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), "Int"));
+        predicate->vars.push_back(MyVariable::variable(name + "_" + std::to_string(index), bvtype));
     }
 
     result.push_back(std::move(predicate));
@@ -550,7 +557,7 @@ std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
     MyVariable input = convert_operand_to_myvar(I->getOperand(0));
     MyVariable output = convert_name_to_myvar(I);
 
-    if (input.type == "Bool" && output.type == "Int") {
+    if (isBoolLike(input.type) and not isBoolLike(output.type)) {
         return std::make_unique<ITEConstraint>(output, input, MyVariable::constant("1"), MyVariable::constant("0"));
     } else {
         return std::make_unique<UnaryConstraint>(std::move(output), std::move(input));
@@ -571,7 +578,7 @@ std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
     MyVariable input = convert_operand_to_myvar(I->getOperand(0));
     MyVariable output = convert_name_to_myvar(I);
 
-    if (input.type == "Int" && output.type == "Bool") {
+    if (not isBoolLike(input.type) and isBoolLike(output.type)) {
         return std::make_unique<BinaryConstraint>(output, input, "!=", MyVariable::constant("0"));
     } else {
         return std::make_unique<UnaryConstraint>(output, input);
@@ -588,7 +595,7 @@ std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction const * I)
     auto op1_type = get_type(I->getOperand(0)->getType());
     auto op2_type = get_type(I->getOperand(1)->getType());
 
-    if (op1_type == "Bool" && op2_type == "Bool") {
+    if (isBoolLike(op1_type) and isBoolLike(op2_type)) {
         return transform_binary_inst(I);
     } else {
         throw std::logic_error("Logic operation not on Bool");
@@ -812,7 +819,10 @@ MyPredicate Context::get_function_predicate(MyFunctionInfo const & function_info
     }
 
     // Add return value
-    if (!F.getReturnType()->isVoidTy()) { predicate.vars.push_back(function_info.return_value); }
+    if (!F.getReturnType()->isVoidTy()) {
+        assert(function_info.return_value.has_value());
+        predicate.vars.push_back(function_info.return_value.value());
+    }
 
     if (!function_info.is_main_function) {
         // Add input and output errors

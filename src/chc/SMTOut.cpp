@@ -26,7 +26,7 @@ void SMTOutput::smt_declare_function(MyConstraint const & predicate) {
                                    << "Bool";
                         }
                     } else {
-                        output << " " << v.type;
+                        output << " " << toSMTLibType(v.type);
                     }
                 }
 
@@ -69,11 +69,11 @@ void SMTOutput::smt_print_constraints(Implication::Constraints const & constrain
 // Print all variables from predicates in implication
 int SMTOutput::smt_quantifiers(Implication const & implication, int indent) {
     auto vars = all_vars(implication);
-    if (vars.empty()) { vars.insert(MyVariable::variable("HORNIX_UNUSED", "Bool")); }
+    if (vars.empty()) { vars.insert(MyVariable::variable("HORNIX_UNUSED", BitvectorType::make(1))); }
     // Print variables
         output << std::string(indent++, ' ') << "(forall ( ";
         for (auto v : vars) {
-            output << "( " << v.name << " " << v.type << " )";
+            output << "( " << v.name << " " << toSMTLibType(v.type) << " )";
         }
         output << " )" << std::endl;
     return indent;
@@ -107,6 +107,12 @@ void SMTOutput::smt_declare_implication(Implication const & implication) {
         output << std::string(indent--, ' ') << ")" << std::endl;
     }
 }
+
+std::string SMTOutput::toSMTLibType(BitvectorType const & bvtype) {
+    if (bvtype.size() == 1) { return "Bool"; }
+    return "Int";
+}
+
 
 void SMTOutput::print_header() const {
     output << "(set-logic HORN)\n";

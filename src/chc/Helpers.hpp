@@ -35,16 +35,28 @@ const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
 enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND };
 
+
+class BitvectorType {
+public:
+    using bvsize_t = unsigned;
+    static BitvectorType make(bvsize_t size);
+
+    bvsize_t size() const { return size_; }
+private:
+    BitvectorType(bvsize_t const size) : size_(size) {}
+    bvsize_t size_ = 32u;
+};
+
 struct MyVariable {
     std::string name{};
-    std::string type{};
+    BitvectorType type;
     bool isConstant{};
 
     static MyVariable constant(std::string val) {
-        return MyVariable{.name = std::move(val), .type = {}, .isConstant = true};
+        return MyVariable{.name = std::move(val), .type = BitvectorType::make(32), .isConstant = true};
     }
 
-    static MyVariable variable(std::string name, std::string type) {
+    static MyVariable variable(std::string name, BitvectorType type) {
         return MyVariable{.name = std::move(name), .type = std::move(type), .isConstant = false};
     }
 };
@@ -275,7 +287,7 @@ struct MyFunctionInfo {
     // True if function name is from MAIN_FUNCTIONS list
     bool is_main_function;
     // Type of variable to return from function
-    MyVariable return_value;
+    std::optional<MyVariable> return_value = std::nullopt;
     // Pointer to llvm function struct
     llvm::Function const & llvm_function;
     // Error index

@@ -51,6 +51,11 @@ std::set<MyVariable> all_vars(Implication const & implication) {
     }
     return vars;
 }
+
+BitvectorType BitvectorType::make(bvsize_t size) {
+    return BitvectorType(size);
+}
+
 } // namespace hornix
 
 
