@@ -98,7 +98,7 @@ Options parse(int argc, char ** argv) {
                 res.addOption(Options::INPUT_FILE, optarg);
                 break;
             default:
-                abort();
+                exit(1);
         }
     }
     if (optind < argc) {

@@ -3,6 +3,9 @@
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 test_dir="${script_dir}/benchmarks"
 executable="${script_dir}/../build/src/hornix"
+pass_count=0
+fail_count=0
+skip_count=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -48,7 +48,9 @@ void fatalError(std::string const & message) {
 int main(int argc, char * argv[]) {
     Options options = parse(argc, argv);
     Context context;
-    assert(options.hasOption(Options::INPUT_FILE));
+    if (!options.hasOption(Options::INPUT_FILE)) {
+        fatalError("No input file specified!");
+    }
     auto path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal();
     if (not fs::exists(path)) {
         fatalError("Input file does not exist: " + path.string());
