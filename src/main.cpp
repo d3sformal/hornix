@@ -59,7 +59,7 @@ int main(int argc, char * argv[]) {
         auto extension = path.extension().string();
         if (extension == ".ll")
             return context.module_from_ir_file(path);
-        if (extension == ".c") {
+        if (extension == ".c" or extension == ".i") {
             return context.module_from_c_file(path, options.getOption(Options::CLANG_DIR));
         }
         fatalError("Unrecognized extension: " + extension);
