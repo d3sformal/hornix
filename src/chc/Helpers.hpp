@@ -12,10 +12,10 @@
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
-#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_set>

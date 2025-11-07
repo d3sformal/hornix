@@ -10,11 +10,25 @@
 #include "llvm/IR/Function.h"
 
 #include <map>
-#include <set>
+#include <unordered_set>
 
 namespace hornix {
 
-using ValueSet = std::set<llvm::Value const *>;
+class ValueSet {
+public:
+    using ValuePtr = llvm::Value const *;
+
+    bool contains(ValuePtr v) const;
+    void insert(ValuePtr v);
+    void insert(ValueSet const & other);
+    bool operator!=(ValueSet const & other) const;
+
+    auto begin() const { return values.begin(); }
+    auto end() const { return values.end(); }
+private:
+    std::vector<ValuePtr> values;
+    std::unordered_set<ValuePtr> valueSet;
+};
 using BlockLiveness = std::map<llvm::BasicBlock const *, ValueSet>;
 
 struct LivenessInfo {

@@ -779,7 +779,7 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, Basic
     };
     // Function arguments need to be carried along
     for (auto const & arg : function_info.llvm_function.args()) {
-        if (live_variables.count(&arg) == 0) {
+        if (not live_variables.contains(&arg)) {
             processRegisterValue(&arg);
         }
     }

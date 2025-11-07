@@ -22,7 +22,7 @@ auto compute_usedef(BasicBlock const & BB) {
         if (I.getOpcode() != Instruction::PHI) {
             for (Value * Op : I.operands()) {
                 if (isa<Instruction>(Op) or isa<Argument>(Op)) {
-                    if (!def.count(Op)) {
+                    if (not def.contains(Op)) {
                         use.insert(Op);
                     }
                 }
@@ -80,13 +80,12 @@ LivenessInfo compute_liveness(Function const & F) {
                 newOut.insert(entry);
             }
             for (BasicBlock const * Succ : llvm::successors(&BB)) {
-                ValueSet & inSucc = IN[Succ];
-                newOut.insert(inSucc.begin(), inSucc.end());
+                newOut.insert(IN[Succ]);
             }
 
             ValueSet newIn = USE[&BB];
             for (Value const * v : newOut) {
-                if (not DEF[&BB].count(v)) {
+                if (not DEF[&BB].contains(v)) {
                     newIn.insert(v);
                 }
             }
@@ -99,7 +98,31 @@ LivenessInfo compute_liveness(Function const & F) {
             }
         }
     }
-
     return { IN, OUT };
 }
+
+bool ValueSet::contains(ValuePtr v) const {
+    return this->valueSet.count(v) > 0;
+}
+
+void ValueSet::insert(ValuePtr v) {
+    if (not contains(v)) {
+        values.push_back(v);
+        valueSet.insert(v);
+    }
+}
+
+bool ValueSet::operator!=(ValueSet const & other) const {
+    return this->values != other.values;
+}
+
+void ValueSet::insert(ValueSet const & other) {
+    for (ValuePtr v : other.values) {
+        insert(v);
+    }
+}
+
+
+
+
 } // namespace hornix
