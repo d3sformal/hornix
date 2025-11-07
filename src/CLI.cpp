@@ -75,7 +75,7 @@ Options parse(int argc, char ** argv) {
         switch (c) {
             case 0:
                 if (long_options[option_index].flag == &printVersion) {
-                    std::cout << "Hornix " << "0.1.0" << std::endl;
+                    std::cout << "Hornix " << "0.2.0" << std::endl;
                     exit(0);
                 }
                 if (strcmp(long_options[option_index].name, Options::SOLVER.c_str()) == 0) {
