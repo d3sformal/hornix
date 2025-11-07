@@ -47,14 +47,14 @@ void fatalError(std::string const & message) {
 
 int main(int argc, char * argv[]) {
     Options options = parse(argc, argv);
-    Context context;
-    if (!options.hasOption(Options::INPUT_FILE)) {
+    if (not options.hasOption(Options::INPUT_FILE)) {
         fatalError("No input file specified!");
     }
     auto path = fs::absolute(options.getOption(Options::INPUT_FILE).value()).lexically_normal();
     if (not fs::exists(path)) {
         fatalError("Input file does not exist: " + path.string());
     }
+    Context context;
     auto module = [&]() -> std::unique_ptr<llvm::Module> {
         auto extension = path.extension().string();
         if (extension == ".ll")
