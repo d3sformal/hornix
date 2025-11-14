@@ -252,16 +252,17 @@ inline std::string to_string(BasicBlockPredicateType type) {
 }
 
 struct MyBasicBlock {
+    using ID_t = std::uint32_t;
     // Reference to basic block
     llvm::BasicBlock const * BB_link;
     // Name of basic block
     std::string name;
     // Id of basic block
-    std::uint8_t id;
+    ID_t id;
     // List of ids of predecessors of basic block
-    std::vector<std::uint8_t> predecessors;
+    std::vector<ID_t> predecessors;
     // List of ids of successors of basic block
-    std::vector<std::uint8_t> successors;
+    std::vector<ID_t> successors;
     // True if block calls assert function and fails
     bool isFalseBlock;
     // True if it contains return instruction
@@ -269,7 +270,7 @@ struct MyBasicBlock {
     // True if there is call instruction in basic block
     bool isFunctionCalled;
 
-    MyBasicBlock(llvm::BasicBlock const * BB_link_, std::string name_, std::uint8_t const id_)
+    MyBasicBlock(llvm::BasicBlock const * BB_link_, std::string name_, ID_t const id_)
         : BB_link(BB_link_),
           name(std::move(name_)),
           id(id_),
@@ -279,7 +280,7 @@ struct MyBasicBlock {
 };
 
 struct MyFunctionInfo {
-    using BasicBlocks = std::map<unsigned, MyBasicBlock>;
+    using BasicBlocks = std::map<MyBasicBlock::ID_t, MyBasicBlock>;
     // Indexed map of basic blocks
     BasicBlocks basic_blocks;
     // Function name

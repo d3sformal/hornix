@@ -146,7 +146,7 @@ MyVariable convert_operand_to_myvar(Value const * value) {
     return convert_name_to_myvar(value);
 }
 
-std::optional<std::int8_t> get_block_id_by_link(BasicBlock const * block,
+std::optional<MyBasicBlock::ID_t> get_block_id_by_link(BasicBlock const * block,
                                                 MyFunctionInfo::BasicBlocks const & my_blocks) {
     for (auto const & [id, my_block] : my_blocks) {
         if (my_block.BB_link == block) { return id; }
