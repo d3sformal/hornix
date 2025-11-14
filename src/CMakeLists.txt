@@ -3,6 +3,7 @@ add_executable(hornix main.cpp)
 target_sources(hornix
         PRIVATE
         "CLI.cpp"
+        "ir-preprocess/BoolSimplifyPass.cpp"
         "Preprocessing.cpp"
         "chc/Backend.cpp"
         "chc/ChcTransform.cpp"

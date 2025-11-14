@@ -6,12 +6,15 @@
 
 #include "Preprocessing.hpp"
 
+#include "ir-preprocess/BoolSimplifyPass.hpp"
+
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Transforms/Scalar/DCE.h"
 #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
-#include "llvm/Transforms/Utils/Mem2Reg.h"
 #include "llvm/Transforms/Utils/InstructionNamer.h"
+#include "llvm/Transforms/Utils/Mem2Reg.h"
 
 using namespace llvm;
 
@@ -38,13 +41,15 @@ std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     FPM.addPass(PromotePass()); // mem2reg
     FPM.addPass(SimplifyCFGPass()); //simplifycfg
     FPM.addPass(InstSimplifyPass()); //instsimplify
+    FPM.addPass(BoolSimplifyPass());
+    FPM.addPass(DCEPass()); // dead code elimination
+    FPM.addPass(InstSimplifyPass()); //instsimplify
     FPM.addPass(InstructionNamerPass()); // instnamer, should always be last
 
-    // Run the function pass manager over each function
-    for (Function & f : *module) {
-        if (!f.isDeclaration())
-            FPM.run(f, FAM);
-    }
+    ModulePassManager MPM;
+    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+    MPM.run(*module, MAM);
     return module;
 }
 
