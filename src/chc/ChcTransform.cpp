@@ -584,7 +584,7 @@ std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
         auto out_size = output.type.size();
         if (output.type.size() < input.type.size()) {
             assert(out_size < 64);
-            auto val = 1 << output.type.size();
+            std::uint64_t val = 1 << output.type.size();
             return std::make_unique<BinaryConstraint>(output, input, "mod", MyVariable::constant(std::to_string(val)));
         }
         return std::make_unique<UnaryConstraint>(output, input);
