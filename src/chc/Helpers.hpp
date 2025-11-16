@@ -147,15 +147,12 @@ struct BinaryConstraint : MyConstraint {
     { }
     std::string Print() const override { return result.name + " = " + operand1.name + " " + sign + " " + operand2.name; }
 
-    std::string GetSMT() const override {
-        if (sign == "!=") {
-            return "(= " + result.name + " (not (= " + operand1.name + " " + operand2.name + " )))";
-        } else {
-            return "(= " + result.name + " (" + sign + " " + operand1.name + " " + operand2.name + " ))";
-        }
-    }
+    std::string GetSMT() const override;
 
     MyPredicateType GetType() const override { return BINARY; }
+private:
+    bool isComparison() const;
+    std::string applyModulo(MyVariable const &) const;
 };
 struct UnaryConstraint : MyConstraint {
     MyVariable result;

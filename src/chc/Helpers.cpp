@@ -56,6 +56,30 @@ BitvectorType BitvectorType::make(bvsize_t size) {
     return BitvectorType(size);
 }
 
+std::string BinaryConstraint::GetSMT() const {
+    std::string op1 = isComparison() ? applyModulo(operand1) : operand1.name;
+    std::string op2 = isComparison() ? applyModulo(operand2) : operand2.name;
+    if (sign == "!=") {
+        return "(= " + result.name + " (not (= " + op1 + " " + op2 + " )))";
+    } else {
+        return "(= " + result.name + " (" + sign + " " + op1 + " " + op2 + " ))";
+    }
+}
+
+bool BinaryConstraint::isComparison() const {
+    return sign == "=" or sign == "!=" or sign == "<" or sign == "<=" or sign == ">" or sign == ">=";
+}
+
+std::string BinaryConstraint::applyModulo(MyVariable const & var) const {
+    if (var.isConstant or var.type.size() == 1) return var.name;
+    auto bitsize = var.type.size();
+    assert(bitsize <= 64);
+    std::uint64_t val = 1 << (bitsize - 1);
+    return "(mod " + var.name + " " + std::to_string(val) + ")";
+}
+
+
+
 } // namespace hornix
 
 
