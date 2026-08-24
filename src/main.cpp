@@ -124,6 +124,9 @@ int main(int argc, char * argv[]) {
     } catch (UnsupportedFeature const & problem) {
         std::cerr << problem.what() << std::endl;
         return 1;
+    } catch (std::exception const & problem) {
+        std::cerr << "Internal error: " << problem.what() << std::endl;
+        return 1;
     }
 }
 

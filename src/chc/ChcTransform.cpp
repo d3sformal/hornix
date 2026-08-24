@@ -623,9 +623,8 @@ std::unique_ptr<MyConstraint> transform_sext(Instruction const * I) {
 
 // Create constraint for load instruction with global variable
 std::unique_ptr<Equality> Context::transform_load_operand(Instruction const * I) {
-    assert(llvm::isa<GlobalVariable>(I->getOperand(0)));
     auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(0));
-    if (not global_var) { throw std::logic_error("Unexpected operand of load instruction"); }
+    if (not global_var) { throw UnsupportedFeature("Loads through non-global pointers are not supported."); }
     auto it = global_vars.find(global_var);
     if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
     auto const & [name, index] = it->second;
@@ -639,9 +638,8 @@ std::unique_ptr<Equality> Context::transform_load_operand(Instruction const * I)
 
 // Create constraint for store instruction with global variable
 std::unique_ptr<Equality> Context::transform_store_operand(Instruction const * I) {
-    assert(llvm::isa<GlobalVariable>(I->getOperand(1)));
     auto * global_var = llvm::dyn_cast<GlobalVariable>(I->getOperand(1));
-    if (not global_var) { throw std::logic_error("Unexpected operand of store instruction"); }
+    if (not global_var) { throw UnsupportedFeature("Stores through non-global pointers are not supported."); }
     auto it = global_vars.find(global_var);
     if (it == global_vars.end()) { throw std::logic_error("Global variable missing in our info"); }
     auto & [name, index] = it->second;

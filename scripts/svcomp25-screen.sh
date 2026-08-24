@@ -205,13 +205,15 @@ if [[ -z "${resume_dir}" ]]; then
     printf 'task_definition\tsource\texpected_verdict\n' > "${selected}"
     eligible_count=0
     while IFS=$'\t' read -r task_definition input_file expected; do
+        # Do not stop reading early: that would close the process-substitution
+        # pipe and make the upstream Awk process report SIGPIPE.
+        [[ "${limit}" -ne 0 && "${eligible_count}" -ge "${limit}" ]] && continue
         source_file="$(dirname "${task_definition}")/${input_file}"
         [[ -f "${source_file}" && "${source_file}" == *.c ]] || continue
         relative_task="${task_definition#${suite_dir}/}"
         relative_source="${source_file#${suite_dir}/}"
         printf '%s\t%s\t%s\n' "${relative_task}" "${relative_source}" "${expected}" >> "${selected}"
         ((eligible_count += 1))
-        [[ "${limit}" -eq 0 || "${eligible_count}" -lt "${limit}" ]] || break
     done < <(
         if [[ ${#top_directories[@]} -eq 0 ]]; then
             find "${suite_dir}/c" -type f -name '*.yml' -print0

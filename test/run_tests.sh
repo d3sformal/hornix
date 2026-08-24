@@ -68,6 +68,21 @@ check_bitvector_encoding() {
   done
 }
 
+check_unsupported_feature() {
+  local benchmark="${script_dir}/unsupported/non_global_store.c"
+  local output status
+  output="$(${executable} --integer-theory bitvectors --print-chc "${benchmark}" 2>&1)"
+  status=$?
+
+  if [[ ${status} -eq 1 && "${output}" == *"Stores through non-global pointers are not supported."* ]]; then
+    printf "%-48s ${GREEN}PASS${NC}\n" "Unsupported non-global store is rejected"
+    ((pass_count++))
+  else
+    printf "%-48s ${RED}FAIL${NC} (exit %s: %s)\n" "Unsupported non-global store is rejected" "${status}" "${output}"
+    ((fail_count++))
+  fi
+}
+
 run_suite "${script_dir}/benchmarks" int
 run_suite "${script_dir}/benchmarks" bitvectors
 run_suite "${script_dir}/bitvectors" bitvectors
@@ -76,6 +91,7 @@ run_suite "${script_dir}/bitvectors" bitvectors
 # proves x + 1 > x, while i8 bit-vectors expose the x = 255 counterexample.
 run_benchmark "${script_dir}/bitvectors/overflow_false.ll" true int
 check_bitvector_encoding
+check_unsupported_feature
 
 echo
 echo "========== Summary =========="
