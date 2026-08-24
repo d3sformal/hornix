@@ -15,8 +15,8 @@
 namespace hornix {
 class SMTOutput {
 public:
-    SMTOutput() : output(std::cout) {}
-    explicit SMTOutput(std::ostream & out) : output(out) {}
+    explicit SMTOutput(IntegerTheory theory = IntegerTheory::Int) : output(std::cout), theory(theory) {}
+    explicit SMTOutput(std::ostream & out, IntegerTheory theory = IntegerTheory::Int) : output(out), theory(theory) {}
 
     void smt_print_implications(std::vector<Implication> const & implications);
 
@@ -43,6 +43,7 @@ private:
     void print_footer() const;
 
     std::ostream & output;
+    IntegerTheory theory;
     std::unordered_set<std::string> declared_functions;
 };
 } // namespace hornix

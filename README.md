@@ -40,3 +40,20 @@ build/src/hornix example.ll
 ```
 
 `Hornix` uses `Z3` as the backend and it expects `Z3` binary is available on your PATH.
+
+### Integer encodings
+
+By default, Hornix retains its original unbounded-integer encoding:
+
+```shell
+build/src/hornix example.ll
+```
+
+Use `--integer-theory bitvectors` to encode LLVM `iN` values (`N > 1`) as
+fixed-width SMT-LIB bit-vectors; `i1` remains a Boolean. This preserves modular
+arithmetic, signed and unsigned comparisons, division/remainder, bitwise
+operations, shifts, and integer casts.
+
+```shell
+build/src/hornix --integer-theory bitvectors example.ll
+```

@@ -14,6 +14,8 @@
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/IRReader/IRReader.h"
 
@@ -22,6 +24,19 @@
 
 using namespace hornix;
 namespace fs = std::filesystem;
+
+namespace {
+std::optional<fs::path> createUniqueTemporaryFile(std::string const & model) {
+    std::error_code ec;
+    auto temporaryDirectory = fs::temp_directory_path(ec);
+    if (ec || temporaryDirectory.empty()) { return std::nullopt; }
+
+    llvm::SmallString<256> uniquePath;
+    ec = llvm::sys::fs::createUniqueFile((temporaryDirectory / model).string(), uniquePath);
+    if (ec) { return std::nullopt; }
+    return fs::path(std::string(uniquePath.begin(), uniquePath.end()));
+}
+} // namespace
 
 struct Context {
     llvm::LLVMContext context;
@@ -80,10 +95,18 @@ int main(int argc, char * argv[]) {
         return 0;
     }
 
+    auto const integerTheoryOption = options.getOrDefault(Options::INTEGER_THEORY, "int");
+    IntegerTheory const integerTheory = [&] {
+        if (integerTheoryOption == "int") { return IntegerTheory::Int; }
+        if (integerTheoryOption == "bitvectors") { return IntegerTheory::Bitvectors; }
+        fatalError("Unknown integer theory: " + integerTheoryOption + ". Use 'int' or 'bitvectors'.");
+        return IntegerTheory::Int;
+    }();
+
     try {
-        auto chcs = toChc(*module);
+        auto chcs = toChc(*module, integerTheory);
         std::stringstream query_stream;
-        SMTOutput{query_stream}.smt_print_implications(chcs);
+        SMTOutput{query_stream, integerTheory}.smt_print_implications(chcs);
         if (options.getOrDefault(Options::PRINT_CHC, "false") == "true") {
             std::cout << query_stream.str() << std::endl;
             return 0;
@@ -114,14 +137,12 @@ std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path,
         // Hint did not work, try to locate on PATH
         return "clang";
     }();
-    // Prepare temporary directory for the `.ll` file
-    std::error_code ec;
-    auto tmp_dir = fs::temp_directory_path(ec);
-    if (tmp_dir.empty()) {
-        llvm::errs() << "Error accessing temporary directory when attempting to compile the source file!\n";
+    auto maybeIRFile = createUniqueTemporaryFile("hornix-ir-%%%%%%.ll");
+    if (not maybeIRFile.has_value()) {
+        llvm::errs() << "Error creating a temporary LLVM IR file when attempting to compile the source file!\n";
         return nullptr;
     }
-    auto const ir_file = tmp_dir / "output.ll";
+    auto const ir_file = std::move(maybeIRFile.value());
     std::string const command = clang_executable.string() + " -Xclang -disable-O0-optnone -S -emit-llvm -o " + ir_file.string() + " " + path.string() + " 2> /dev/null";
     ScopeGuard guard([ir_file] {
         std::error_code ec;

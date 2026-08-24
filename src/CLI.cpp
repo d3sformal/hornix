@@ -26,6 +26,7 @@ void printUsage() {
         "--solver-dir='<dir>'       Directory with the chosen solver's executable\n"
         "--solver-args='<args>'     Arguments to pass to the chosen solver\n"
         "--clang-dir='<dir>'        Directory with the clang executable\n"
+        "--integer-theory <theory>  Integer encoding: int (default) or bitvectors\n"
         ;
     std::cout << std::flush;
 }
@@ -44,6 +45,7 @@ const std::string Options::SOLVER = "solver";
 const std::string Options::SOLVER_ARGS = "solver-args";
 const std::string Options::SOLVER_DIR = "solver-dir";
 const std::string Options::CLANG_DIR = "clang-dir";
+const std::string Options::INTEGER_THEORY = "integer-theory";
 
 Options parse(int argc, char ** argv) {
 
@@ -62,6 +64,7 @@ Options parse(int argc, char ** argv) {
             {Options::SOLVER_DIR.c_str(), required_argument, nullptr, 0},
             {Options::SOLVER_ARGS.c_str(), required_argument, nullptr, 0},
             {Options::CLANG_DIR.c_str(), required_argument, nullptr, 0},
+            {Options::INTEGER_THEORY.c_str(), required_argument, nullptr, 0},
             {"version", no_argument, &printVersion, 1},
             {0, 0, 0, 0}
         };
@@ -89,6 +92,9 @@ Options parse(int argc, char ** argv) {
                 }
                 if (strcmp(long_options[option_index].name, Options::CLANG_DIR.c_str()) == 0) {
                     res.addOption(Options::CLANG_DIR, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::INTEGER_THEORY.c_str()) == 0) {
+                    res.addOption(Options::INTEGER_THEORY, optarg);
                 }
                 break;
             case 'h':

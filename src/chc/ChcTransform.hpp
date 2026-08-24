@@ -15,10 +15,10 @@ using Implications = std::vector<Implication>;
 
 class ChcTransform {
 public:
-  Implications run(llvm::Module const &);
+  Implications run(llvm::Module const &, IntegerTheory);
 };
 
-Implications toChc(llvm::Module const &);
+Implications toChc(llvm::Module const &, IntegerTheory);
 } // namespace hornix
 
 

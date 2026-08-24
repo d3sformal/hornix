@@ -16,18 +16,8 @@ void SMTOutput::smt_declare_function(MyConstraint const & predicate) {
 
                 output << "(declare-fun |" << pred->name << "| (";
 
-                for (auto v : pred->vars) {
-                    if (v.isConstant) {
-                        if (v.name != "false" && v.name != "true") {
-                            output << " "
-                                   << "Int";
-                        } else {
-                            output << " "
-                                   << "Bool";
-                        }
-                    } else {
-                        output << " " << toSMTLibType(v.type);
-                    }
+                for (auto const & v : pred->vars) {
+                    output << " " << toSMTLibType(v.type);
                 }
 
                 output << ") Bool )" << std::endl;
@@ -53,12 +43,12 @@ void SMTOutput::smt_print_constraints(Implication::Constraints const & constrain
     auto count = constraints.size();
 
     if (count == 1) {
-        output << constraints[0]->GetSMT();
+        output << constraints[0]->GetSMT(theory);
     } else {
         output << "(and ";
 
         for (auto const & p : constraints) {
-            output << p->GetSMT();
+            output << p->GetSMT(theory);
             output << " ";
         }
 
@@ -98,7 +88,7 @@ void SMTOutput::smt_declare_implication(Implication const & implication) {
     // Convert head of implication
     output << std::string(indent, ' ');
 
-    output << implication.head.GetSMT();
+    output << implication.head.GetSMT(theory);
     output << std::endl;
     indent--;
 
@@ -110,6 +100,9 @@ void SMTOutput::smt_declare_implication(Implication const & implication) {
 
 std::string SMTOutput::toSMTLibType(BitvectorType const & bvtype) {
     if (bvtype.size() == 1) { return "Bool"; }
+    if (theory == IntegerTheory::Bitvectors) {
+        return "(_ BitVec " + std::to_string(bvtype.size()) + ")";
+    }
     return "Int";
 }
 

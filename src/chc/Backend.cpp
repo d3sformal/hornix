@@ -5,7 +5,10 @@
  */
 
 #include "Backend.hpp"
+#include "utils/ScopeGuard.hpp"
 
+#include <llvm/ADT/SmallString.h>
+#include <llvm/Support/FileSystem.h>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -16,6 +19,20 @@
 namespace fs = std::filesystem;
 
 namespace hornix {
+namespace {
+fs::path createUniqueTemporaryFile(std::string const & model) {
+    std::error_code ec;
+    auto temporaryDirectory = fs::temp_directory_path(ec);
+    if (ec || temporaryDirectory.empty()) {
+        throw std::logic_error("Could not locate temporary directory");
+    }
+
+    llvm::SmallString<256> uniquePath;
+    ec = llvm::sys::fs::createUniqueFile((temporaryDirectory / model).string(), uniquePath);
+    if (ec) { throw std::logic_error("Could not create a temporary query file"); }
+    return fs::path(std::string(uniquePath.begin(), uniquePath.end()));
+}
+} // namespace
 
 SolverContext SolverContext::z3_default() {
     return {
@@ -41,12 +58,15 @@ Result solve(std::string query) {
 
 
 Result solve(std::string query, SolverContext context) {
-    std::error_code ec;
-    auto tmp_dir = fs::temp_directory_path(ec);
-    if (tmp_dir.empty()) {
-        throw std::logic_error("Could not locate temporary directory");
-    }
-    auto const smtfile = tmp_dir / "hornix_query.smt2";
+    auto const smtfile = createUniqueTemporaryFile("hornix-query-%%%%%%.smt2");
+    fs::path response_path = smtfile;
+    response_path.replace_extension(".out");
+    ScopeGuard cleanup([&] {
+        std::error_code ec;
+        fs::remove(smtfile, ec);
+        fs::remove(response_path, ec);
+    });
+
     // Write the query to a temporary file
     std::ofstream tempFile(smtfile);
     if (!tempFile) {
@@ -56,20 +76,15 @@ Result solve(std::string query, SolverContext context) {
     tempFile << query;
     tempFile.close();
 
-    fs::path response_path = smtfile;
-    response_path.replace_extension("out");
     std::optional<std::string> solver_dir = context.solver_dir.has_value() ? context.solver_dir.value() + fs::path::preferred_separator : std::optional<std::string>{};
     std::string command = solver_dir.value_or("") + context.solver + " " + context.args + " " + smtfile.string() + " >" + response_path.string();
     std::system(command.c_str());
-
-    fs::remove(smtfile, ec);
 
     std::ifstream file(response_path); // opens in text mode by default
     std::stringstream buffer;
     buffer << file.rdbuf(); // read entire file into buffer
     std::string response = buffer.str();
     file.close();
-    fs::remove(response_path);
     return response;
 }
 } // namespace hornix

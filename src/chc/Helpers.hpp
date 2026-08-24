@@ -33,7 +33,11 @@ const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
 const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
 const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND };
+enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND, CAST };
+
+// `Int` preserves the original Hornix encoding.  `Bitvectors` maps every LLVM
+// integer type to its corresponding fixed-width SMT-LIB bit-vector sort.
+enum class IntegerTheory { Int, Bitvectors };
 
 
 class BitvectorType {
@@ -51,15 +55,29 @@ struct MyVariable {
     std::string name{};
     BitvectorType type;
     bool isConstant{};
+    bool isIntegerConstant{};
+    // Decimal unsigned representation of an integer constant.  It is used to
+    // print the same LLVM bit pattern in the bit-vector encoding.
+    std::string bitvectorValue{};
 
     static MyVariable constant(std::string val) {
-        return MyVariable{.name = std::move(val), .type = BitvectorType::make(32), .isConstant = true};
+        return MyVariable{.name = std::move(val), .type = BitvectorType::make(1), .isConstant = true,
+                          .isIntegerConstant = false};
+    }
+
+    static MyVariable integerConstant(std::string intValue, std::string bvValue, BitvectorType type) {
+        return MyVariable{.name = std::move(intValue), .type = type, .isConstant = true,
+                          .isIntegerConstant = true, .bitvectorValue = std::move(bvValue)};
     }
 
     static MyVariable variable(std::string name, BitvectorType type) {
-        return MyVariable{.name = std::move(name), .type = std::move(type), .isConstant = false};
+        return MyVariable{.name = std::move(name), .type = std::move(type), .isConstant = false,
+                          .isIntegerConstant = false};
     }
 };
+
+std::string smtTerm(MyVariable const & variable, IntegerTheory theory);
+std::string smtOperator(std::string const & op, IntegerTheory theory);
 
 // TODO: This is probably not entirely correct
 inline bool operator<(MyVariable const & first, MyVariable const & second) { return first.name < second.name; }
@@ -68,7 +86,7 @@ struct MyConstraint {
     virtual ~MyConstraint() {}
     virtual std::string Print() const { throw std::logic_error("Missing implementation of Print!"); }
     virtual MyPredicateType GetType() const = 0;
-    virtual std::string GetSMT() const = 0;
+    virtual std::string GetSMT(IntegerTheory theory) const = 0;
 };
 
 struct MyPredicate : MyConstraint {
@@ -100,15 +118,14 @@ struct MyPredicate : MyConstraint {
         return res;
     }
 
-    std::string GetSMT() const override {
+    std::string GetSMT(IntegerTheory theory) const override {
         std::ostringstream res;
         auto var_size = vars.size();
         if (var_size > 0) { res << "("; }
 
         res << name;
-        for (auto v : vars) {
-            auto name = v.name;
-            res << " " << name;
+        for (auto const & v : vars) {
+            res << " " << smtTerm(v, theory);
         }
         if (var_size > 0) { res << " )"; }
 
@@ -130,8 +147,9 @@ struct ITEConstraint : MyConstraint {
 
     std::string Print() const override { return result.name + "=ite(" + condition.name + "," + operand1.name + "," + operand2.name + ")"; }
 
-    std::string GetSMT() const override {
-        return +"(= " + result.name + " (ite " + condition.name + " " + operand1.name + " " + operand2.name + " ))";
+    std::string GetSMT(IntegerTheory theory) const override {
+        return "(= " + smtTerm(result, theory) + " (ite " + smtTerm(condition, theory) + " " +
+               smtTerm(operand1, theory) + " " + smtTerm(operand2, theory) + " ))";
     }
 
     MyPredicateType GetType() const override { return ITE; }
@@ -147,11 +165,15 @@ struct BinaryConstraint : MyConstraint {
     { }
     std::string Print() const override { return result.name + " = " + operand1.name + " " + sign + " " + operand2.name; }
 
-    std::string GetSMT() const override {
+    std::string GetSMT(IntegerTheory theory) const override {
         if (sign == "!=") {
-            return "(= " + result.name + " (not (= " + operand1.name + " " + operand2.name + " )))";
+            return "(= " + smtTerm(result, theory) + " (not (= " + smtTerm(operand1, theory) + " " +
+                   smtTerm(operand2, theory) + " )))";
         } else {
-            return "(= " + result.name + " (" + sign + " " + operand1.name + " " + operand2.name + " ))";
+            auto op = (theory == IntegerTheory::Bitvectors && result.type.size() == 1 &&
+                       (sign == "and" || sign == "or" || sign == "xor")) ? sign : smtOperator(sign, theory);
+            return "(= " + smtTerm(result, theory) + " (" + op + " " +
+                   smtTerm(operand1, theory) + " " + smtTerm(operand2, theory) + " ))";
         }
     }
 
@@ -164,7 +186,9 @@ struct UnaryConstraint : MyConstraint {
     UnaryConstraint(MyVariable result, MyVariable value) : result(std::move(result)), value(std::move(value)) {}
     std::string Print() const override { return result.name + " = " + value.name; }
 
-    std::string GetSMT() const override { return "(= " + result.name + " " + value.name + " )"; }
+    std::string GetSMT(IntegerTheory theory) const override {
+        return "(= " + smtTerm(result, theory) + " " + smtTerm(value, theory) + " )";
+    }
 
     MyPredicateType GetType() const override { return UNARY; }
 };
@@ -176,7 +200,10 @@ struct ComparisonConstraint : MyConstraint {
     ComparisonConstraint(MyVariable operand1, std::string sign, MyVariable operand2)
         : operand1(std::move(operand1)), sign(std::move(sign)), operand2(std::move(operand2)) {}
     std::string Print() const override { return operand1.name + sign + operand2.name; }
-    std::string GetSMT() const override { return "(" + sign + " " + operand1.name + " " + operand2.name + " )"; }
+    std::string GetSMT(IntegerTheory theory) const override {
+        return "(" + smtOperator(sign, theory) + " " + smtTerm(operand1, theory) + " " +
+               smtTerm(operand2, theory) + " )";
+    }
     MyPredicateType GetType() const override { return COMPARISON; }
 };
 struct Equality : MyConstraint {
@@ -186,7 +213,9 @@ struct Equality : MyConstraint {
     Equality(MyVariable lhs, MyVariable rhs) : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
     [[nodiscard]] std::string Print() const override { return lhs.name + " = " + rhs.name; }
 
-    [[nodiscard]] std::string GetSMT() const override { return "(= " + lhs.name + " " + rhs.name + " )"; }
+    [[nodiscard]] std::string GetSMT(IntegerTheory theory) const override {
+        return "(= " + smtTerm(lhs, theory) + " " + smtTerm(rhs, theory) + " )";
+    }
 
     [[nodiscard]] MyPredicateType GetType() const override { return EQUALITY; }
 };
@@ -198,7 +227,7 @@ struct Not : MyConstraint {
 
     [[nodiscard]] std::string Print() const override { return "not(" + inner->Print() + ")"; }
 
-    [[nodiscard]] std::string GetSMT() const override { return "(not " + inner->GetSMT() + ")"; }
+    [[nodiscard]] std::string GetSMT(IntegerTheory theory) const override { return "(not " + inner->GetSMT(theory) + ")"; }
 
     [[nodiscard]] MyPredicateType GetType() const override { return NOT; }
 };
@@ -208,17 +237,31 @@ struct And : MyConstraint {
     ~And() override = default;
     explicit And(std::vector<std::unique_ptr<MyConstraint>> args) : args(std::move(args)) {}
 
-    [[nodiscard]] std::string GetSMT() const override {
+    [[nodiscard]] std::string GetSMT(IntegerTheory theory) const override {
         std::stringstream ss;
         ss << "(and ";
         for (auto const & arg : args) {
-            ss << arg->GetSMT();
+            ss << arg->GetSMT(theory);
         }
         ss << ')';
         return ss.str();
     }
 
     [[nodiscard]] MyPredicateType GetType() const override { return AND; }
+};
+
+enum class CastKind { ZExt, SExt, Trunc };
+
+struct CastConstraint : MyConstraint {
+    MyVariable result;
+    MyVariable input;
+    CastKind kind;
+
+    CastConstraint(MyVariable result, MyVariable input, CastKind kind)
+        : result(std::move(result)), input(std::move(input)), kind(kind) {}
+
+    std::string GetSMT(IntegerTheory theory) const override;
+    MyPredicateType GetType() const override { return CAST; }
 };
 
 struct Implication {

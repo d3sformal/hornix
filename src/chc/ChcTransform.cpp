@@ -11,6 +11,7 @@
 #include <Exceptions.hpp>
 
 #include <llvm/IR/Constants.h>
+#include <llvm/ADT/SmallString.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/PassManager.h>
@@ -21,7 +22,7 @@ using namespace llvm;
 namespace hornix {
 class Context {
 public:
-    static Context create(Module const & module);
+    static Context create(Module const & module, IntegerTheory theory);
 
     void analyze(Function const & F /*, FunctionAnalysisManager & AM*/);
 
@@ -58,6 +59,7 @@ private:
 
     GlobalInfo global_vars;
     Implications implications;
+    IntegerTheory theory;
 };
 
 namespace {
@@ -77,9 +79,10 @@ Context::GlobalInfo get_global_info(Module const & module) {
 }
 } // namespace
 
-Context Context::create(Module const & module) {
+Context Context::create(Module const & module, IntegerTheory theory) {
     Context context;
     context.global_vars = get_global_info(module);
+    context.theory = theory;
     return context;
 }
 
@@ -120,6 +123,19 @@ BitvectorType get_type(Type const * type) {
     throw UnsupportedFeature("Unknown type of variable.");
 }
 
+MyVariable convert_constant_to_myvar(ConstantInt const * constant, bool signedValue) {
+    auto type = get_type(constant->getType());
+    llvm::SmallString<32> value;
+    llvm::SmallString<32> bitvectorValue;
+    constant->getValue().toString(value, 10, signedValue);
+    constant->getValue().toString(bitvectorValue, 10, false);
+    auto intValue = value.str().str();
+    if (signedValue && not intValue.empty() && intValue[0] == '-') {
+        intValue = "(- " + intValue.substr(1) + ')';
+    }
+    return MyVariable::integerConstant(std::move(intValue), bitvectorValue.str().str(), type);
+}
+
 std::string convert_name_to_string(Value const * const value) {
     std::string name;
     raw_string_ostream string_stream(name);
@@ -133,15 +149,10 @@ MyVariable convert_name_to_myvar(Value const * const value) {
 
 MyVariable convert_operand_to_myvar(Value const * value) {
     if (auto const * asConstant = dyn_cast<ConstantInt>(value)) {
-        auto type = get_type(value->getType());
-        auto const num = asConstant->getSExtValue();
-        if (type.size() != 1) {
-            // FIXME: Store value directly, not string representation
-            auto name = num < 0 ? "(- " + std::to_string(num * -1) + ')' : std::to_string(num);
-            return MyVariable::constant(std::move(name));
+        if (value->getType()->isIntegerTy(1)) {
+            return MyVariable::constant(asConstant->isZero() ? "false" : "true");
         }
-        assert(type.size() == 1);
-        return MyVariable::constant(num != 0 ? "true" : "false");
+        return convert_constant_to_myvar(asConstant, true);
     }
     return convert_name_to_myvar(value);
 }
@@ -394,6 +405,12 @@ Implication::Constraints Context::transform_function_call(Instruction const * I,
 
     // If function not declared, check name for predefined non-deterministic functions
     if (!fn || fn->isDeclaration()) {
+        // Every bit pattern is a valid value of an LLVM integer return type.
+        // Explicit numeric bounds are only needed by the legacy Int encoding.
+        if (theory == IntegerTheory::Bitvectors) {
+            result.push_back(std::make_unique<MyPredicate>("true"));
+            return result;
+        }
         if (function_name.find(UNSIGNED_UINT_FUNCTION, 0) != std::string::npos) {
 
             result.push_back(std::make_unique<ComparisonConstraint>(convert_name_to_myvar(I), ">=", MyVariable::constant("0")));
@@ -465,21 +482,25 @@ std::string cmp_sign(Instruction const * I) {
     CmpInst const * CmpI = cast<CmpInst>(I);
     switch (CmpI->getPredicate()) {
         case CmpInst::ICMP_EQ:
-            return "=";
+            return "eq";
         case CmpInst::ICMP_NE:
             return "!=";
         case CmpInst::ICMP_UGT:
+            return "ugt";
         case CmpInst::ICMP_SGT:
-            return ">";
+            return "sgt";
         case CmpInst::ICMP_UGE:
+            return "uge";
         case CmpInst::ICMP_SGE:
-            return ">=";
+            return "sge";
         case CmpInst::ICMP_ULT:
+            return "ult";
         case CmpInst::ICMP_SLT:
-            return "<";
+            return "slt";
         case CmpInst::ICMP_ULE:
+            return "ule";
         case CmpInst::ICMP_SLE:
-            return "<=";
+            return "sle";
         default:
             throw UnsupportedFeature("Unknown comparison symbol.");
         break;
@@ -493,18 +514,12 @@ std::unique_ptr<BinaryConstraint> transform_comparison(Instruction const * I) {
     auto * lhs = comparison->getOperand(0);
     auto * rhs = comparison->getOperand(1);
 
-    // Get constant value as signed or unsigned based on type of comparison
+    // The integer encoding needs a signed or unsigned decimal value; the
+    // bit-vector encoding always keeps the original bit pattern.
     auto as_my_var = [&](Value * val) -> MyVariable {
         if (auto asConstant = dyn_cast<ConstantInt>(val)) {
-            if (comparison->isSigned()) {
-                auto value = asConstant->getSExtValue();
-                // FIXME!
-                if (value < 0) { return MyVariable::constant("(- " + std::to_string(value * -1) + ')'); }
-                return MyVariable::constant(std::to_string(value));
-            } else {
-                auto value = asConstant->getZExtValue();
-                return MyVariable::constant(std::to_string(value));
-            }
+            if (val->getType()->isIntegerTy(1)) { return convert_operand_to_myvar(val); }
+            return convert_constant_to_myvar(asConstant, comparison->isSigned());
         }
         return convert_name_to_myvar(val);
     };
@@ -513,7 +528,7 @@ std::unique_ptr<BinaryConstraint> transform_comparison(Instruction const * I) {
 }
 
 // Create binary constraint from binary instructions
-std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
+std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I, IntegerTheory theory) {
     std::string sign;
     switch (I->getOpcode()) {
         case Instruction::ICmp:
@@ -528,21 +543,52 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
             sign = "*";
         break;
         case Instruction::UDiv:
+            sign = "udiv";
+        break;
         case Instruction::SDiv:
-            sign = "div";
+            sign = "sdiv";
         break;
         case Instruction::URem:
+            sign = "urem";
+        break;
         case Instruction::SRem:
-            sign = "mod";
+            sign = "srem";
         break;
         case Instruction::Xor:
+            if (theory == IntegerTheory::Int && not I->getOperand(0)->getType()->isIntegerTy(1)) {
+                throw UnsupportedFeature("Integer bitwise operations require --integer-theory bitvectors.");
+            }
             sign = "xor";
         break;
         case Instruction::And:
+            if (theory == IntegerTheory::Int && not I->getOperand(0)->getType()->isIntegerTy(1)) {
+                throw UnsupportedFeature("Integer bitwise operations require --integer-theory bitvectors.");
+            }
             sign = "and";
         break;
         case Instruction::Or:
+            if (theory == IntegerTheory::Int && not I->getOperand(0)->getType()->isIntegerTy(1)) {
+                throw UnsupportedFeature("Integer bitwise operations require --integer-theory bitvectors.");
+            }
             sign = "or";
+        break;
+        case Instruction::Shl:
+            if (theory == IntegerTheory::Int) {
+                throw UnsupportedFeature("Shift operations require --integer-theory bitvectors.");
+            }
+            sign = "shl";
+        break;
+        case Instruction::LShr:
+            if (theory == IntegerTheory::Int) {
+                throw UnsupportedFeature("Shift operations require --integer-theory bitvectors.");
+            }
+            sign = "lshr";
+        break;
+        case Instruction::AShr:
+            if (theory == IntegerTheory::Int) {
+                throw UnsupportedFeature("Shift operations require --integer-theory bitvectors.");
+            }
+            sign = "ashr";
         break;
         default:
             throw UnsupportedFeature("Unknown binary instruction.");
@@ -552,16 +598,8 @@ std::unique_ptr<BinaryConstraint> transform_binary_inst(Instruction const * I) {
                                               sign, convert_operand_to_myvar(I->getOperand(1)));
 }
 
-// Create constraint for zext instruction
 std::unique_ptr<MyConstraint> transform_zext(Instruction const * I) {
-    MyVariable input = convert_operand_to_myvar(I->getOperand(0));
-    MyVariable output = convert_name_to_myvar(I);
-
-    if (isBoolLike(input.type) and not isBoolLike(output.type)) {
-        return std::make_unique<ITEConstraint>(output, input, MyVariable::constant("1"), MyVariable::constant("0"));
-    } else {
-        return std::make_unique<UnaryConstraint>(std::move(output), std::move(input));
-    }
+    return std::make_unique<CastConstraint>(convert_name_to_myvar(I), convert_operand_to_myvar(I->getOperand(0)), CastKind::ZExt);
 }
 
 std::unique_ptr<MyConstraint> transform_select(SelectInst const * I) {
@@ -573,39 +611,12 @@ std::unique_ptr<MyConstraint> transform_select(SelectInst const * I) {
     );
 }
 
-// Create constraint for trunc instruction
 std::unique_ptr<MyConstraint> transform_trunc(Instruction const * I) {
-    MyVariable input = convert_operand_to_myvar(I->getOperand(0));
-    MyVariable output = convert_name_to_myvar(I);
-
-    if (not isBoolLike(input.type) and isBoolLike(output.type)) {
-        return std::make_unique<BinaryConstraint>(output, input, "!=", MyVariable::constant("0"));
-    } else {
-        auto out_size = output.type.size();
-        if (output.type.size() < input.type.size()) {
-            assert(out_size < 64);
-            std::uint64_t val = 1 << output.type.size();
-            return std::make_unique<BinaryConstraint>(output, input, "mod", MyVariable::constant(std::to_string(val)));
-        }
-        return std::make_unique<UnaryConstraint>(output, input);
-    }
+    return std::make_unique<CastConstraint>(convert_name_to_myvar(I), convert_operand_to_myvar(I->getOperand(0)), CastKind::Trunc);
 }
 
-// Create equality constraint for sext instruction
-std::unique_ptr<UnaryConstraint> transform_sext(Instruction const * I) {
-    return std::make_unique<UnaryConstraint>(convert_name_to_myvar(I), convert_name_to_myvar(I->getOperand(0)));
-}
-
-// Create constraint for logic instruction with boolean variables
-std::unique_ptr<BinaryConstraint> transform_logic_operand(Instruction const * I) {
-    auto op1_type = get_type(I->getOperand(0)->getType());
-    auto op2_type = get_type(I->getOperand(1)->getType());
-
-    if (isBoolLike(op1_type) and isBoolLike(op2_type)) {
-        return transform_binary_inst(I);
-    } else {
-        throw std::logic_error("Logic operation not on Bool");
-    }
+std::unique_ptr<MyConstraint> transform_sext(Instruction const * I) {
+    return std::make_unique<CastConstraint>(convert_name_to_myvar(I), convert_operand_to_myvar(I->getOperand(0)), CastKind::SExt);
 }
 
 } // namespace
@@ -682,7 +693,7 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
             case Instruction::SDiv:
             case Instruction::URem:
             case Instruction::SRem:
-                result.push_back(transform_binary_inst(&I));
+                result.push_back(transform_binary_inst(&I, theory));
             break;
             case Instruction::ZExt:
                 result.push_back(transform_zext(&I));
@@ -703,11 +714,14 @@ Implication::Constraints Context::transform_instructions(MyBasicBlock const & BB
                 result.push_back(transform_select(dyn_cast<SelectInst>(&I)));
                 break;
             }
-            // Transform logic instruction on booleans
+            // Bit-vector logic is supported for every integer width.
             case Instruction::Xor:
             case Instruction::And:
             case Instruction::Or:
-                result.push_back(transform_logic_operand(&I));
+            case Instruction::Shl:
+            case Instruction::LShr:
+            case Instruction::AShr:
+                result.push_back(transform_binary_inst(&I, theory));
             break;
             case Instruction::Call: {
                 auto predicates = transform_function_call(&I, function_info);
@@ -850,12 +864,12 @@ MyPredicate Context::get_fail_block_predicate(MyFunctionInfo const & function_in
     }
 }
 
-Implications toChc(Module const & module) {
-    return ChcTransform{}.run(module);
+Implications toChc(Module const & module, IntegerTheory theory) {
+    return ChcTransform{}.run(module, theory);
 }
 
-Implications ChcTransform::run(Module const & module) {
-    auto context = Context::create(module);
+Implications ChcTransform::run(Module const & module, IntegerTheory theory) {
+    auto context = Context::create(module, theory);
     for (Function const & f : module) {
         if (not f.isDeclaration()) { context.analyze(f); }
     }
