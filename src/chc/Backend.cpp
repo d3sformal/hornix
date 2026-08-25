@@ -15,6 +15,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <sys/wait.h>
 
 namespace fs = std::filesystem;
 
@@ -78,9 +79,23 @@ Result solve(std::string query, SolverContext context) {
 
     std::optional<std::string> solver_dir = context.solver_dir.has_value() ? context.solver_dir.value() + fs::path::preferred_separator : std::optional<std::string>{};
     std::string command = solver_dir.value_or("") + context.solver + " " + context.args + " " + smtfile.string() + " >" + response_path.string();
-    std::system(command.c_str());
+    int const solver_status = std::system(command.c_str());
+    if (solver_status == -1) {
+        throw std::runtime_error("Could not start solver '" + context.solver + "'");
+    }
+    if (WIFSIGNALED(solver_status)) {
+        throw std::runtime_error("Solver '" + context.solver + "' was terminated by signal " +
+                                 std::to_string(WTERMSIG(solver_status)));
+    }
+    if (!WIFEXITED(solver_status) || WEXITSTATUS(solver_status) != 0) {
+        throw std::runtime_error("Solver '" + context.solver + "' exited with status " +
+                                 std::to_string(WIFEXITED(solver_status) ? WEXITSTATUS(solver_status) : solver_status));
+    }
 
     std::ifstream file(response_path); // opens in text mode by default
+    if (!file) {
+        throw std::runtime_error("Solver '" + context.solver + "' produced no result file");
+    }
     std::stringstream buffer;
     buffer << file.rdbuf(); // read entire file into buffer
     std::string response = buffer.str();

@@ -43,14 +43,18 @@ worker_solve() {
         unsat) actual=false ;;
     esac
 
-    if [[ ${exit_code} -eq 0 && "${actual}" == "${expected}" ]]; then
-        status=MATCH
+    if [[ ${exit_code} -eq 0 && ( "${actual}" == true || "${actual}" == false ) ]]; then
+        if [[ "${actual}" == "${expected}" ]]; then
+            status=MATCH
+        else
+            status=MISMATCH
+        fi
         rm -f "${error_file}"
         message=""
     elif [[ ${exit_code} -eq 0 ]]; then
-        status=MISMATCH
-        rm -f "${error_file}"
-        message=""
+        status=ERROR
+        message="$(head -n 1 <<< "${output}" | tr '\t\n' ' ')"
+        [[ -n "${message}" ]] || message="no result emitted"
     else
         status=ERROR
         message="$(head -n 1 "${error_file}" | tr '\t\n' ' ')"

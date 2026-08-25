@@ -83,6 +83,20 @@ check_unsupported_feature() {
   fi
 }
 
+check_solver_failure() {
+  local output status
+  output="$(${executable} --solver false "${script_dir}/benchmarks/max_true.c" 2>&1)"
+  status=$?
+
+  if [[ ${status} -eq 1 && "${output}" == *"Solver 'false' exited with status 1"* ]]; then
+    printf "%-48s ${GREEN}PASS${NC}\n" "Solver failures are reported"
+    ((pass_count++))
+  else
+    printf "%-48s ${RED}FAIL${NC} (exit %s: %s)\n" "Solver failures are reported" "${status}" "${output}"
+    ((fail_count++))
+  fi
+}
+
 run_suite "${script_dir}/benchmarks" int
 run_suite "${script_dir}/benchmarks" bitvectors
 run_suite "${script_dir}/bitvectors" bitvectors
@@ -92,6 +106,7 @@ run_suite "${script_dir}/bitvectors" bitvectors
 run_benchmark "${script_dir}/bitvectors/overflow_false.ll" true int
 check_bitvector_encoding
 check_unsupported_feature
+check_solver_failure
 
 echo
 echo "========== Summary =========="

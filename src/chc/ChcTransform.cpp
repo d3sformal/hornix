@@ -44,7 +44,8 @@ private:
     std::unique_ptr<Equality> transform_store_operand(Instruction const * I);
 
     std::vector<std::unique_ptr<UnaryConstraint>> transform_phi_instructions(MyBasicBlock const & predecessor,
-                                                                             MyBasicBlock const & successor);
+                                                                             MyBasicBlock const & successor,
+                                                                             std::string const & phi_suffix);
 
     Implication get_entry_block_implication(MyFunctionInfo const & function_info, MyBasicBlock const & BB1);
 
@@ -105,7 +106,9 @@ MyFunctionInfo::BasicBlocks load_basic_blocks(Function const & F) {
     std::string const function_name = F.getName().str();
 
     for (BasicBlock const & BB : F) {
-        auto name = function_name + std::to_string(bb_index);
+        // Keep predicate names unambiguous.  Without the separator, block 22
+        // of `calculate_output` collided with block 2 of `calculate_output2`.
+        auto name = function_name + "_" + std::to_string(bb_index);
         MyBasicBlock myBB(&BB, std::move(name), bb_index);
         basic_blocks.insert(std::make_pair(bb_index, myBB));
         ++bb_index;
@@ -272,6 +275,33 @@ void Context::analyze(Function const & F) {
     std::move(implications.begin(), implications.end(), std::back_inserter(this->implications));
 }
 
+namespace {
+
+// A PHI value denotes the value at the beginning of its block.  On a back
+// edge, the same LLVM value can also occur as an input to another PHI node.
+// The two occurrences represent different program states and must therefore
+// use different SMT variables in the transition clause.
+MyVariable make_phi_target_variable(PHINode const & phi, std::string const & suffix) {
+    auto variable = convert_name_to_myvar(&phi);
+    variable.name += suffix;
+    return variable;
+}
+
+void rename_successor_phi_values(MyPredicate & predicate, MyBasicBlock const & successor,
+                                 std::string const & phi_suffix) {
+    for (Instruction const & instruction : successor.BB_link->instructionsWithoutDebug()) {
+        auto const * phi = dyn_cast<PHINode>(&instruction);
+        if (!phi) { break; }
+        auto const original = convert_name_to_myvar(phi);
+        auto const target = make_phi_target_variable(*phi, phi_suffix);
+        for (MyVariable & variable : predicate.vars) {
+            if (variable.name == original.name) { variable = target; }
+        }
+    }
+}
+
+} // namespace
+
 std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & function_info) {
 
     std::vector<Implication> clauses;
@@ -290,6 +320,8 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
 
             auto const & successor = function_info.basic_blocks.at(succ);
             auto succ_predicate = create_basic_block_predicate(successor, BasicBlockPredicateType::ENTRY, function_info);
+            auto const phi_suffix = "__edge_from_" + std::to_string(BB.id);
+            rename_successor_phi_values(succ_predicate, successor, phi_suffix);
 
             // Create implication
             Implication implication(succ_predicate);
@@ -302,7 +334,7 @@ std::vector<Implication> Context::transform_basic_blocks(MyFunctionInfo & functi
             implication.constraints.push_back(std::make_unique<MyPredicate>(current_exit_predicate));
 
             // Translate phi instructions
-            for (auto && constraint : transform_phi_instructions(BB, successor)) {
+            for (auto && constraint : transform_phi_instructions(BB, successor, phi_suffix)) {
                 implication.constraints.push_back(std::move(constraint));
             }
 
@@ -650,7 +682,8 @@ std::unique_ptr<Equality> Context::transform_store_operand(Instruction const * I
 
 // Set variables for phi instruction, depending on label before
 std::vector<std::unique_ptr<UnaryConstraint>> Context::transform_phi_instructions(MyBasicBlock const & predecessor,
-                                                                                  MyBasicBlock const & successor) {
+                                                                                  MyBasicBlock const & successor,
+                                                                                  std::string const & phi_suffix) {
 
     std::vector<std::unique_ptr<UnaryConstraint>> result;
 
@@ -659,7 +692,8 @@ std::vector<std::unique_ptr<UnaryConstraint>> Context::transform_phi_instruction
             Value const * translation = I.DoPHITranslation(successor.BB_link, predecessor.BB_link);
 
             result.push_back(
-                std::make_unique<UnaryConstraint>(convert_name_to_myvar(&I), convert_operand_to_myvar(translation)));
+                std::make_unique<UnaryConstraint>(make_phi_target_variable(cast<PHINode>(I), phi_suffix),
+                                                  convert_operand_to_myvar(translation)));
         }
     }
     return result;
@@ -806,11 +840,15 @@ MyPredicate Context::create_basic_block_predicate(MyBasicBlock const & BB, Basic
             processRegisterValue(phi_value);
         }
     }
-    // Branching value must be part of the exit predicates
+    // Branching values must be part of exit predicates because transition
+    // clauses use them to select the successor.
     if (type == BasicBlockPredicateType::EXIT) {
         Instruction const * terminator = BB.BB_link->getTerminator();
         if (auto * branch = dyn_cast<BranchInst>(terminator); branch and branch->isConditional()) {
             Value const * condition = branch->getCondition();
+            if (isRegisterValue(condition)) { processRegisterValue(condition); }
+        } else if (auto const * switch_inst = dyn_cast<SwitchInst>(terminator)) {
+            Value const * condition = switch_inst->getCondition();
             if (isRegisterValue(condition)) { processRegisterValue(condition); }
         } else if (auto const * ret = dyn_cast<ReturnInst>(terminator)) {
             if (Value const * ret_value = ret->getReturnValue(); isRegisterValue(ret_value)) {
