@@ -57,3 +57,32 @@ operations, shifts, and integer casts.
 ```shell
 build/src/hornix --integer-theory bitvectors example.ll
 ```
+
+### Violation witnesses
+
+Hornix can emit a YAML 2.2 violation witness for an unsafe `unreach-call`
+task.  The witness mode currently supports a single `.c` input, the
+bit-vector encoding, and either SV-COMP C data model (`ILP32` or `LP64`).
+
+```shell
+build/src/hornix \
+  --integer-theory bitvectors \
+  --data-model LP64 \
+  --property path/to/unreach-call.prp \
+  --witness-format 2.1 \
+  --witness-output result.witness.yml \
+  program.c
+```
+
+The witness is written only when Hornix reports `unsat` (an error is
+reachable in Hornix's CHC encoding).  It contains the required task metadata,
+the SHA-256 hash of the physical source input, and a `target` waypoint for the
+direct call named by the property.  To prevent an arbitrary target being
+reported, the current implementation requires that this call can be located
+unambiguously in the original source; macros and several calls to the target
+are rejected.  Reconstructing a path and nondeterministic choices from Z3 is
+not implemented yet.
+
+The default format is 2.2. Use `--witness-format 2.0` or
+`--witness-format 2.1` for validators that do not yet support 2.2; CPAchecker
+4.2.2 accepts version 2.1.

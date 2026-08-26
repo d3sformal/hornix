@@ -43,6 +43,10 @@ public:
     static const std::string SOLVER_DIR;
     static const std::string CLANG_DIR;
     static const std::string INTEGER_THEORY;
+    static const std::string DATA_MODEL;
+    static const std::string PROPERTY;
+    static const std::string WITNESS_OUTPUT;
+    static const std::string WITNESS_FORMAT;
 };
 
 Options parse(int argc, char * argv[]);

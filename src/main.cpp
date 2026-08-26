@@ -7,6 +7,7 @@
 #include "CLI.hpp"
 #include "Exceptions.hpp"
 #include "Preprocessing.hpp"
+#include "Witness.hpp"
 #include "chc/Backend.hpp"
 #include "chc/ChcTransform.hpp"
 #include "chc/SMTOut.hpp"
@@ -21,6 +22,7 @@
 
 #include <iostream>
 #include <filesystem>
+#include <sstream>
 
 using namespace hornix;
 namespace fs = std::filesystem;
@@ -48,7 +50,8 @@ struct Context {
         return llvm::parseIRFile(filename, err, context);
     }
 
-    std::unique_ptr<llvm::Module> module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint);
+    std::unique_ptr<llvm::Module> module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint,
+                                                     std::optional<std::string> const & data_model, bool with_debug_info);
 };
 
 void fatalError(std::string const & message) {
@@ -57,6 +60,15 @@ void fatalError(std::string const & message) {
     llvm::errs().resetColor();
     llvm::errs() << message << '\n';
     exit(1);
+}
+
+std::string commandLine(int argc, char * argv[]) {
+    std::ostringstream result;
+    for (int index = 0; index < argc; ++index) {
+        if (index != 0) { result << ' '; }
+        result << argv[index];
+    }
+    return result.str();
 }
 
 
@@ -69,13 +81,59 @@ int main(int argc, char * argv[]) {
     if (not fs::exists(path)) {
         fatalError("Input file does not exist: " + path.string());
     }
+    auto const witness_output = options.getOption(Options::WITNESS_OUTPUT);
+    auto const witness_format = options.getOption(Options::WITNESS_FORMAT);
+    auto const data_model = options.getOption(Options::DATA_MODEL);
+    std::optional<ViolationWitnessConfiguration> witness_configuration;
+    if (witness_output.has_value()) {
+        if (path.extension() != ".c") {
+            fatalError("Violation witnesses currently require a single C source input.");
+        }
+        if (!data_model.has_value() || (data_model.value() != "ILP32" && data_model.value() != "LP64")) {
+            fatalError("Violation witnesses require --data-model ILP32 or --data-model LP64.");
+        }
+        auto const format_version = witness_format.value_or("2.2");
+        if (format_version != "2.0" && format_version != "2.1" && format_version != "2.2") {
+            fatalError("Unknown witness format: " + format_version + ". Use 2.0, 2.1, or 2.2.");
+        }
+        auto const property_option = options.getOption(Options::PROPERTY);
+        if (!property_option.has_value()) {
+            fatalError("Violation witnesses require an SV-COMP unreach-call property via --property.");
+        }
+        auto const property_path = fs::absolute(property_option.value()).lexically_normal();
+        if (!fs::exists(property_path)) {
+            fatalError("Property file does not exist: " + property_path.string());
+        }
+        try {
+            unreachCallTarget(property_path);
+        } catch (std::exception const & error) {
+            fatalError(error.what());
+        }
+        witness_configuration = ViolationWitnessConfiguration{
+            .output_file = fs::absolute(witness_output.value()).lexically_normal(),
+            .input_file = path,
+            .property_file = property_path,
+            .data_model = data_model.value(),
+            .command_line = commandLine(argc, argv),
+            .format_version = format_version,
+        };
+    } else if (witness_format.has_value()) {
+        fatalError("--witness-format requires --witness-output.");
+    } else if (data_model.has_value() && data_model.value() != "ILP32" && data_model.value() != "LP64") {
+        fatalError("Unknown data model: " + data_model.value() + ". Use ILP32 or LP64.");
+    }
+    if (witness_configuration.has_value() &&
+        (options.getOrDefault(Options::PRINT_IR, "false") == "true" || options.getOrDefault(Options::PRINT_CHC, "false") == "true")) {
+        fatalError("--witness-output cannot be combined with --print-ir or --print-chc.");
+    }
     Context context;
     auto module = [&]() -> std::unique_ptr<llvm::Module> {
         auto extension = path.extension().string();
         if (extension == ".ll")
             return context.module_from_ir_file(path);
         if (extension == ".c" or extension == ".i") {
-            return context.module_from_c_file(path, options.getOption(Options::CLANG_DIR));
+            return context.module_from_c_file(path, options.getOption(Options::CLANG_DIR), data_model,
+                                              witness_configuration.has_value());
         }
         fatalError("Unrecognized extension: " + extension);
         llvm_unreachable("Fatal error must exit!");
@@ -102,7 +160,9 @@ int main(int argc, char * argv[]) {
         fatalError("Unknown integer theory: " + integerTheoryOption + ". Use 'int' or 'bitvectors'.");
         return IntegerTheory::Int;
     }();
-
+    if (witness_configuration.has_value() && integerTheory != IntegerTheory::Bitvectors) {
+        fatalError("Violation witnesses currently require --integer-theory bitvectors.");
+    }
     try {
         auto chcs = toChc(*module, integerTheory);
         std::stringstream query_stream;
@@ -119,6 +179,9 @@ int main(int argc, char * argv[]) {
                 options.getOption(Options::SOLVER_DIR)
             )
         );
+        if (witness_configuration.has_value() && res.rfind("unsat", 0) == 0) {
+            writeViolationWitness(witness_configuration.value());
+        }
         std::cout << res << std::endl;
         return 0;
     } catch (UnsupportedFeature const & problem) {
@@ -130,7 +193,8 @@ int main(int argc, char * argv[]) {
     }
 }
 
-std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint) {
+std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path, std::optional<fs::path> const & compiler_hint,
+                                                           std::optional<std::string> const & data_model, bool with_debug_info) {
     auto clang_executable = [&]() -> fs::path {
         if (compiler_hint.has_value()) {
             auto clang_path = compiler_hint.value();
@@ -146,7 +210,10 @@ std::unique_ptr<llvm::Module> Context::module_from_c_file(fs::path const & path,
         return nullptr;
     }
     auto const ir_file = std::move(maybeIRFile.value());
-    std::string const command = clang_executable.string() + " -Xclang -disable-O0-optnone -S -emit-llvm -o " + ir_file.string() + " " + path.string() + " 2> /dev/null";
+    std::string const data_model_flag = data_model.has_value() ? (data_model.value() == "ILP32" ? " -m32" : " -m64") : "";
+    std::string const debug_flag = with_debug_info ? " -g" : "";
+    std::string const command = clang_executable.string() + data_model_flag + debug_flag +
+                                " -Xclang -disable-O0-optnone -S -emit-llvm -o " + ir_file.string() + " " + path.string() + " 2> /dev/null";
     ScopeGuard guard([ir_file] {
         std::error_code ec;
         fs::remove(ir_file, ec);

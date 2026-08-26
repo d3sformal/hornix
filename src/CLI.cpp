@@ -27,6 +27,10 @@ void printUsage() {
         "--solver-args='<args>'     Arguments to pass to the chosen solver\n"
         "--clang-dir='<dir>'        Directory with the clang executable\n"
         "--integer-theory <theory>  Integer encoding: int (default) or bitvectors\n"
+        "--data-model <model>       C data model: ILP32 or LP64\n"
+        "--property <file>          SV-COMP property file (required for witnesses)\n"
+        "--witness-output <file>    Write a YAML 2.2 violation witness for an unsafe result\n"
+        "--witness-format <version> YAML witness format: 2.0, 2.1, or 2.2 (default: 2.2)\n"
         ;
     std::cout << std::flush;
 }
@@ -46,6 +50,10 @@ const std::string Options::SOLVER_ARGS = "solver-args";
 const std::string Options::SOLVER_DIR = "solver-dir";
 const std::string Options::CLANG_DIR = "clang-dir";
 const std::string Options::INTEGER_THEORY = "integer-theory";
+const std::string Options::DATA_MODEL = "data-model";
+const std::string Options::PROPERTY = "property";
+const std::string Options::WITNESS_OUTPUT = "witness-output";
+const std::string Options::WITNESS_FORMAT = "witness-format";
 
 Options parse(int argc, char ** argv) {
 
@@ -65,6 +73,10 @@ Options parse(int argc, char ** argv) {
             {Options::SOLVER_ARGS.c_str(), required_argument, nullptr, 0},
             {Options::CLANG_DIR.c_str(), required_argument, nullptr, 0},
             {Options::INTEGER_THEORY.c_str(), required_argument, nullptr, 0},
+            {Options::DATA_MODEL.c_str(), required_argument, nullptr, 0},
+            {Options::PROPERTY.c_str(), required_argument, nullptr, 0},
+            {Options::WITNESS_OUTPUT.c_str(), required_argument, nullptr, 0},
+            {Options::WITNESS_FORMAT.c_str(), required_argument, nullptr, 0},
             {"version", no_argument, &printVersion, 1},
             {0, 0, 0, 0}
         };
@@ -95,6 +107,18 @@ Options parse(int argc, char ** argv) {
                 }
                 if (strcmp(long_options[option_index].name, Options::INTEGER_THEORY.c_str()) == 0) {
                     res.addOption(Options::INTEGER_THEORY, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::DATA_MODEL.c_str()) == 0) {
+                    res.addOption(Options::DATA_MODEL, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::PROPERTY.c_str()) == 0) {
+                    res.addOption(Options::PROPERTY, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::WITNESS_OUTPUT.c_str()) == 0) {
+                    res.addOption(Options::WITNESS_OUTPUT, optarg);
+                }
+                if (strcmp(long_options[option_index].name, Options::WITNESS_FORMAT.c_str()) == 0) {
+                    res.addOption(Options::WITNESS_FORMAT, optarg);
                 }
                 break;
             case 'h':
