@@ -21,6 +21,12 @@ worker_run() {
     local witness hornix_log cpa_log cpa_output source_path property_path hornix_output hornix_exit hornix_result
     local cpa_output_text cpa_exit cpa_result status hornix_start hornix_ms cpa_start cpa_ms machine_model
 
+    # GNU Parallel omits an empty literal command argument.  The parent uses
+    # this marker for optional solver settings so the remaining task columns
+    # always retain their positions.
+    [[ "${solver_dir}" == "__HORNIX_EMPTY__" ]] && solver_dir=""
+    [[ "${solver_args}" == "__HORNIX_EMPTY__" ]] && solver_args=""
+
     witness="${run_dir}/witnesses/${key}.witness.yml"
     hornix_log="${run_dir}/logs/${key}.hornix.log"
     cpa_log="${run_dir}/logs/${key}.cpachecker.log"
@@ -306,9 +312,13 @@ fi
 echo "Campaign ${run_dir}: ${task_count} selected, ${pending_count} pending; solver=${solver}, jobs=${jobs}."
 
 if [[ "${pending_count}" -gt 0 ]]; then
+    # Keep empty optional arguments as explicit values: otherwise GNU Parallel
+    # removes them and shifts the five TSV task fields passed to worker_run.
+    worker_solver_dir="${solver_dir:-__HORNIX_EMPTY__}"
+    worker_solver_args="${solver_args:-__HORNIX_EMPTY__}"
     parallel --will-cite --jobs "${jobs}" --line-buffer --bar \
         --joblog "${run_dir}/joblog.tsv" --colsep '\t' \
-        bash "$0" --worker-run "${suite_dir}" "${hornix}" "${cpachecker}" "${solver}" "${solver_dir}" "${solver_args}" \
+        bash "$0" --worker-run "${suite_dir}" "${hornix}" "${cpachecker}" "${solver}" "${worker_solver_dir}" "${worker_solver_args}" \
         "${hornix_timeout}" "${validation_timeout}" "${run_dir}" {1} {2} {3} {4} {5} \
         :::: "${pending}"
 fi
