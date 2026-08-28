@@ -68,17 +68,48 @@ check_bitvector_encoding() {
   done
 }
 
+check_local_array_encoding() {
+  local benchmark="${script_dir}/arrays/local_array_false.c"
+  local output operator
+  output="$(${executable} --integer-theory bitvectors --print-chc "${benchmark}" 2>&1)"
+
+  for operator in '(Array ' '(select ' '(store ' '(bvult '; do
+    if grep -Fq "${operator}" <<< "${output}"; then
+      printf "%-48s ${GREEN}PASS${NC}\n" "Local-array SMT emission: ${operator}"
+      ((pass_count++))
+    else
+      printf "%-48s ${RED}FAIL${NC}\n" "Local-array SMT emission: ${operator}"
+      ((fail_count++))
+    fi
+  done
+}
+
 check_unsupported_feature() {
   local benchmark="${script_dir}/unsupported/non_global_store.c"
   local output status
   output="$(${executable} --integer-theory bitvectors --print-chc "${benchmark}" 2>&1)"
   status=$?
 
-  if [[ ${status} -eq 1 && "${output}" == *"Stores through non-global pointers are not supported."* ]]; then
+  if [[ ${status} -eq 1 && "${output}" == *"Loads and stores require a non-escaping local array pointer."* ]]; then
     printf "%-48s ${GREEN}PASS${NC}\n" "Unsupported non-global store is rejected"
     ((pass_count++))
   else
     printf "%-48s ${RED}FAIL${NC} (exit %s: %s)\n" "Unsupported non-global store is rejected" "${status}" "${output}"
+    ((fail_count++))
+  fi
+}
+
+check_local_array_pointer_escape() {
+  local benchmark="${script_dir}/unsupported/local_array_pointer_escape.c"
+  local output status
+  output="$(${executable} --integer-theory bitvectors --print-chc "${benchmark}" 2>&1)"
+  status=$?
+
+  if [[ ${status} -eq 1 && "${output}" == *"Pointer arguments are not supported in the local-array fragment."* ]]; then
+    printf "%-48s ${GREEN}PASS${NC}\n" "Local-array pointer escape is rejected"
+    ((pass_count++))
+  else
+    printf "%-48s ${RED}FAIL${NC} (exit %s: %s)\n" "Local-array pointer escape is rejected" "${status}" "${output}"
     ((fail_count++))
   fi
 }
@@ -146,6 +177,25 @@ PY
   rm -f "${witness}"
 }
 
+check_local_array_violation_witness() {
+  local property="${script_dir}/witnesses/unreach-call.prp"
+  local unsafe="${script_dir}/witnesses/local_array_unsafe_unreach.c"
+  local witness output
+  witness="$(mktemp)"
+
+  output="$(${executable} --integer-theory bitvectors --data-model ILP32 --property "${property}" \
+    --witness-format 2.1 --witness-output "${witness}" "${unsafe}" 2>&1)"
+  if [[ "${output}" == unsat* ]] && grep -Fq 'format_version: "2.1"' "${witness}" && \
+     grep -Fq 'type: target' "${witness}"; then
+    printf "%-48s ${GREEN}PASS${NC}\n" "Violation witness for local array"
+    ((pass_count++))
+  else
+    printf "%-48s ${RED}FAIL${NC} (%s)\n" "Violation witness for local array" "${output}"
+    ((fail_count++))
+  fi
+  rm -f "${witness}"
+}
+
 check_witness_option_validation() {
   local property="${script_dir}/witnesses/unreach-call.prp"
   local unsafe="${script_dir}/witnesses/unsafe_unreach.c"
@@ -207,14 +257,19 @@ check_witness_format_selection() {
 run_suite "${script_dir}/benchmarks" int
 run_suite "${script_dir}/benchmarks" bitvectors
 run_suite "${script_dir}/bitvectors" bitvectors
+run_suite "${script_dir}/arrays" int
+run_suite "${script_dir}/arrays" bitvectors
 
 # This benchmark distinguishes the two theories: unbounded Int arithmetic
 # proves x + 1 > x, while i8 bit-vectors expose the x = 255 counterexample.
 run_benchmark "${script_dir}/bitvectors/overflow_false.ll" true int
 check_bitvector_encoding
+check_local_array_encoding
 check_unsupported_feature
+check_local_array_pointer_escape
 check_solver_failure
 check_violation_witness
+check_local_array_violation_witness
 check_witness_option_validation
 check_witness_format_selection
 

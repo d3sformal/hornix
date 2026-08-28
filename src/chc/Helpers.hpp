@@ -33,7 +33,8 @@ const std::string UNSIGNED_SHORT_FUNCTION = "__VERIFIER_nondet_short";
 const std::string UNSIGNED_UCHAR_FUNCTION = "__VERIFIER_nondet_uchar";
 const std::string UNSIGNED_CHAR_FUNCTION = "__VERIFIER_nondet_char";
 
-enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND, CAST };
+enum MyPredicateType { BINARY, UNARY, COMPARISON, ITE, LOAD, EQUALITY, PREDICATE, FUNCTION, NOT, AND, CAST,
+                       ARRAY_SELECT, ARRAY_STORE };
 
 // `Int` preserves the original Hornix encoding.  `Bitvectors` maps every LLVM
 // integer type to its corresponding fixed-width SMT-LIB bit-vector sort.
@@ -51,9 +52,43 @@ private:
     bvsize_t size_ = 32u;
 };
 
+// Hornix originally needed only scalar integer sorts.  Local C arrays require
+// first-class SMT array values, while their indices and elements remain LLVM
+// integer values.  Keeping the array case one-dimensional is intentional: it
+// is sufficient for the non-escaping stack-array fragment and avoids silently
+// introducing a general pointer or heap model.
+class MyType {
+public:
+    enum class Kind { Scalar, Array };
+
+    MyType() : scalar_type_(BitvectorType::make(32)) {}
+    MyType(BitvectorType scalar_type) : kind_(Kind::Scalar), scalar_type_(std::move(scalar_type)) {}
+
+    static MyType array(BitvectorType index_type, BitvectorType element_type) {
+        MyType result;
+        result.kind_ = Kind::Array;
+        result.index_type_ = std::move(index_type);
+        result.element_type_ = std::move(element_type);
+        return result;
+    }
+
+    bool isScalar() const { return kind_ == Kind::Scalar; }
+    bool isArray() const { return kind_ == Kind::Array; }
+    BitvectorType const & scalarType() const { assert(isScalar()); return scalar_type_; }
+    BitvectorType const & indexType() const { assert(isArray()); return index_type_; }
+    BitvectorType const & elementType() const { assert(isArray()); return element_type_; }
+    unsigned size() const { return scalarType().size(); }
+
+private:
+    Kind kind_ = Kind::Scalar;
+    BitvectorType scalar_type_ = BitvectorType::make(32);
+    BitvectorType index_type_ = BitvectorType::make(32);
+    BitvectorType element_type_ = BitvectorType::make(32);
+};
+
 struct MyVariable {
     std::string name{};
-    BitvectorType type;
+    MyType type;
     bool isConstant{};
     bool isIntegerConstant{};
     // Decimal unsigned representation of an integer constant.  It is used to
@@ -70,7 +105,7 @@ struct MyVariable {
                           .isIntegerConstant = true, .bitvectorValue = std::move(bvValue)};
     }
 
-    static MyVariable variable(std::string name, BitvectorType type) {
+    static MyVariable variable(std::string name, MyType type) {
         return MyVariable{.name = std::move(name), .type = std::move(type), .isConstant = false,
                           .isIntegerConstant = false};
     }
@@ -220,6 +255,39 @@ struct Equality : MyConstraint {
     [[nodiscard]] MyPredicateType GetType() const override { return EQUALITY; }
 };
 
+struct ArraySelectConstraint : MyConstraint {
+    MyVariable result;
+    MyVariable array;
+    MyVariable index;
+
+    ArraySelectConstraint(MyVariable result_, MyVariable array_, MyVariable index_)
+        : result(std::move(result_)), array(std::move(array_)), index(std::move(index_)) {}
+
+    std::string GetSMT(IntegerTheory theory) const override {
+        return "(= " + smtTerm(result, theory) + " (select " + smtTerm(array, theory) + " " +
+               smtTerm(index, theory) + "))";
+    }
+
+    MyPredicateType GetType() const override { return ARRAY_SELECT; }
+};
+
+struct ArrayStoreConstraint : MyConstraint {
+    MyVariable result;
+    MyVariable array;
+    MyVariable index;
+    MyVariable value;
+
+    ArrayStoreConstraint(MyVariable result_, MyVariable array_, MyVariable index_, MyVariable value_)
+        : result(std::move(result_)), array(std::move(array_)), index(std::move(index_)), value(std::move(value_)) {}
+
+    std::string GetSMT(IntegerTheory theory) const override {
+        return "(= " + smtTerm(result, theory) + " (store " + smtTerm(array, theory) + " " +
+               smtTerm(index, theory) + " " + smtTerm(value, theory) + "))";
+    }
+
+    MyPredicateType GetType() const override { return ARRAY_STORE; }
+};
+
 struct Not : MyConstraint {
     std::unique_ptr<MyConstraint> inner;
     ~Not() override = default;
@@ -322,6 +390,17 @@ struct MyBasicBlock {
           isFunctionCalled(false) {}
 };
 
+struct LocalMemoryObject {
+    llvm::AllocaInst const * allocation;
+    unsigned id;
+    BitvectorType index_type;
+    BitvectorType element_type;
+    llvm::Value const * allocation_count;
+    std::uint64_t static_element_count;
+
+    MyType type() const { return MyType::array(index_type, element_type); }
+};
+
 struct MyFunctionInfo {
     using BasicBlocks = std::map<MyBasicBlock::ID_t, MyBasicBlock>;
     // Indexed map of basic blocks
@@ -338,6 +417,9 @@ struct MyFunctionInfo {
     int e_index;
     // Liveness information
     LivenessInfo liveness_info;
+    // Non-escaping local integer arrays.  These are threaded explicitly
+    // through basic-block predicates instead of being represented as pointers.
+    std::vector<LocalMemoryObject> local_memory_objects;
 
     MyFunctionInfo(llvm::Function const & function, std::string name, bool is_main)
         : name(std::move(name)), is_main_function(is_main), llvm_function(function), e_index(0) {}

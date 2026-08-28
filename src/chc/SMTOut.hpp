@@ -35,7 +35,7 @@ private:
         }
     }
 
-    std::string toSMTLibType(BitvectorType const & bvtype);
+    std::string toSMTLibType(MyType const & type);
 
     int smt_quantifiers(Implication const & implication, int indent);
 

@@ -98,7 +98,12 @@ void SMTOutput::smt_declare_implication(Implication const & implication) {
     }
 }
 
-std::string SMTOutput::toSMTLibType(BitvectorType const & bvtype) {
+std::string SMTOutput::toSMTLibType(MyType const & type) {
+    if (type.isArray()) {
+        return "(Array " + toSMTLibType(MyType(type.indexType())) + " " +
+               toSMTLibType(MyType(type.elementType())) + ")";
+    }
+    auto const & bvtype = type.scalarType();
     if (bvtype.size() == 1) { return "Bool"; }
     if (theory == IntegerTheory::Bitvectors) {
         return "(_ BitVec " + std::to_string(bvtype.size()) + ")";

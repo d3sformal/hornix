@@ -58,6 +58,17 @@ operations, shifts, and integer casts.
 build/src/hornix --integer-theory bitvectors example.ll
 ```
 
+### Local integer arrays
+
+Hornix supports non-escaping local arrays of LLVM integer elements, including
+Clang's variable-length arrays. They are encoded as SMT arrays and their
+contents and allocation length are carried through the control-flow graph.
+This support intentionally does not model a general C heap: arrays may not be
+passed to a function, returned, converted to an integer, or otherwise escape
+their allocating function. Global arrays, `malloc`/`calloc`, pointer
+parameters, aggregates with non-integer elements, and floating-point arrays
+remain unsupported.
+
 ### Violation witnesses
 
 Hornix can emit a YAML 2.2 violation witness for an unsafe `unreach-call`

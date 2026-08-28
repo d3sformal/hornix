@@ -132,6 +132,15 @@ void collect_vars(MyConstraint const * constraint, vars_t & vars) {
     } else if (auto * equality = dynamic_cast<Equality const *>(constraint)) {
         process(equality->lhs);
         process(equality->rhs);
+    } else if (auto * select = dynamic_cast<ArraySelectConstraint const *>(constraint)) {
+        process(select->result);
+        process(select->array);
+        process(select->index);
+    } else if (auto * store = dynamic_cast<ArrayStoreConstraint const *>(constraint)) {
+        process(store->result);
+        process(store->array);
+        process(store->index);
+        process(store->value);
     } else if (auto * unary = dynamic_cast<UnaryConstraint const *>(constraint)) {
         process(unary->result);
         process(unary->value);

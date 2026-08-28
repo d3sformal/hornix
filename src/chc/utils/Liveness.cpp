@@ -21,14 +21,18 @@ auto compute_usedef(BasicBlock const & BB) {
         // We do not consider PHI arguments as used in this block, they are specific to the corresponding transition
         if (I.getOpcode() != Instruction::PHI) {
             for (Value * Op : I.operands()) {
-                if (isa<Instruction>(Op) or isa<Argument>(Op)) {
+                // Pointer values are interpreted by the local-memory layer as
+                // object-plus-index references.  They are never CHC predicate
+                // arguments; carrying them as scalar variables would conflate
+                // the restricted stack-array fragment with a pointer model.
+                if ((isa<Instruction>(Op) or isa<Argument>(Op)) && !Op->getType()->isPointerTy()) {
                     if (not def.contains(Op)) {
                         use.insert(Op);
                     }
                 }
             }
         }
-        if (I.getType()->isVoidTy()) { continue; }
+        if (I.getType()->isVoidTy() || I.getType()->isPointerTy()) { continue; }
         def.insert(&I);
     }
     return std::make_pair(use, def);
