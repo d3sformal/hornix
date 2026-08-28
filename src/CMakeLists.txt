@@ -5,6 +5,7 @@ target_sources(hornix
         "CLI.cpp"
         "Witness.cpp"
         "ir-preprocess/BoolSimplifyPass.cpp"
+        "ir-preprocess/SplitErrorCallsPass.cpp"
         "Preprocessing.cpp"
         "chc/Backend.cpp"
         "chc/ChcTransform.cpp"

@@ -7,6 +7,7 @@
 #include "Preprocessing.hpp"
 
 #include "ir-preprocess/BoolSimplifyPass.hpp"
+#include "ir-preprocess/SplitErrorCallsPass.hpp"
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -44,6 +45,7 @@ std::unique_ptr<Module> transform(std::unique_ptr<Module> module) {
     FPM.addPass(BoolSimplifyPass());
     FPM.addPass(DCEPass()); // dead code elimination
     FPM.addPass(InstSimplifyPass()); //instsimplify
+    FPM.addPass(SplitErrorCallsPass());
     FPM.addPass(InstructionNamerPass()); // instnamer, should always be last
 
     ModulePassManager MPM;
