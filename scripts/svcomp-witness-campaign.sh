@@ -116,7 +116,7 @@ top_dir_overridden=false
 
 usage() {
     cat <<'EOF'
-Usage: scripts/svcomp25-witness-campaign.sh [options]
+Usage: scripts/svcomp-witness-campaign.sh [options]
 
 Run expected-false, single-file C unreach-call tasks through Hornix and
 validate every generated violation witness with CPAchecker.  The default is a
@@ -135,12 +135,12 @@ Options:
   --top-dir NAME           Restrict selection to c/NAME; repeatable.
   --label NAME             Include NAME in the result-directory name.
   --resume DIR             Continue a previous campaign directory.
-  --suite DIR              Unpacked SV-COMP 2025 benchmark suite.
+  --suite DIR              Unpacked SV-COMP benchmark suite.
   --hornix PATH            Hornix executable (default: build/src/hornix).
   --cpachecker PATH        CPAchecker executable (default: cpachecker on PATH).
   -h, --help               Show this help.
 
-Each campaign creates results/svcomp25-witness-campaign-*/ containing:
+Each campaign creates results/<input-dir-name>-*/ containing:
   selected.tsv             deterministic candidate list
   results.tsv              Hornix and CPAchecker outcomes plus elapsed milliseconds
   status-summary.tsv       counts of validated witnesses, timeouts, and failures
@@ -255,7 +255,7 @@ if [[ -n "${resume_dir}" ]]; then
     echo "Resuming ${run_dir}. The current command-line solver settings are used."
 else
     run_suffix="$(safe_name "${label:-${solver}}")"
-    run_dir="${project_dir}/results/svcomp25-witness-campaign-${run_suffix}-$(date +%Y%m%d-%H%M%S)"
+    run_dir="${project_dir}/results/${suite}-witness-campaign-${run_suffix}-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "${run_dir}/witnesses" "${run_dir}/logs" "${run_dir}/cpachecker" "${run_dir}/outcomes"
     {
         printf 'key\tvalue\n'
