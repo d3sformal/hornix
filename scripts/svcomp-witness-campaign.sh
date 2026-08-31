@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run a reproducible SV-COMP 2025 violation-witness campaign.  Each selected
+# Run a reproducible SV-COMP violation-witness campaign. Each selected
 # expected-false unreach-call task is first analysed by Hornix and every
 # produced witness is then independently validated by CPAchecker.
 
@@ -11,7 +11,10 @@ safe_name() {
 }
 
 now_millis() {
-    date +%s%3N
+    # Durations must not depend on the wall clock: NTP or a system upgrade can
+    # adjust it while a campaign is running. Python's monotonic clock is also
+    # available on the Ubuntu environments used for SV-COMP experiments.
+    python3 -c 'import time; print(time.monotonic_ns() // 1_000_000)'
 }
 
 worker_run() {
@@ -151,8 +154,9 @@ Each campaign creates results/<input-dir-name>-*/ containing:
   witnesses/, logs/, cpachecker/, outcomes/
 
 The script returns success only when every selected task produces a witness
-accepted by CPAchecker.  A campaign is diagnostic, not an official SV-COMP
-reproduction: timeout is wall time and no memory or CPU-core limit is imposed.
+accepted by CPAchecker. Durations use a monotonic clock. A campaign is
+diagnostic, not an official SV-COMP reproduction: timeout is wall time and no
+memory or CPU-core limit is imposed.
 EOF
 }
 
@@ -193,6 +197,9 @@ if [[ -z "${solver}" || ! -x "${hornix}" || ! -d "${suite_dir}/c" ]]; then
     echo "Check --solver, --hornix, and --suite." >&2
     exit 2
 fi
+# Worker processes change into a per-task directory for CPAchecker. Keep all
+# benchmark paths absolute so the program and property remain addressable.
+suite_dir="$(cd "${suite_dir}" && pwd -P)"
 if [[ -n "${solver_dir}" && ! -d "${solver_dir}" ]]; then
     echo "--solver-dir is not a directory: ${solver_dir}" >&2
     exit 2
@@ -203,6 +210,10 @@ if ! command -v "${cpachecker}" > /dev/null; then
 fi
 if ! command -v parallel > /dev/null; then
     echo "GNU Parallel is required; install the 'parallel' package first." >&2
+    exit 2
+fi
+if ! command -v python3 > /dev/null; then
+    echo "Python 3 is required for monotonic duration measurement." >&2
     exit 2
 fi
 cpachecker="$(command -v "${cpachecker}")"
@@ -255,12 +266,13 @@ if [[ -n "${resume_dir}" ]]; then
     echo "Resuming ${run_dir}. The current command-line solver settings are used."
 else
     run_suffix="$(safe_name "${label:-${solver}}")"
-    run_dir="${project_dir}/results/${suite}-witness-campaign-${run_suffix}-$(date +%Y%m%d-%H%M%S)"
+    suite_name="$(safe_name "$(basename "${suite_dir}")")"
+    run_dir="${project_dir}/results/${suite_name}-witness-campaign-${run_suffix}-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "${run_dir}/witnesses" "${run_dir}/logs" "${run_dir}/cpachecker" "${run_dir}/outcomes"
     {
         printf 'key\tvalue\n'
-        printf 'hornix\t%s\ncpachecker\t%s\nsolver\t%s\nsolver_dir\t%s\nsolver_args\t%s\n' \
-            "${hornix}" "${cpachecker}" "${solver}" "${solver_dir}" "${solver_args}"
+        printf 'suite\t%s\nhornix\t%s\ncpachecker\t%s\nsolver\t%s\nsolver_dir\t%s\nsolver_args\t%s\n' \
+            "${suite_dir}" "${hornix}" "${cpachecker}" "${solver}" "${solver_dir}" "${solver_args}"
         printf 'hornix_timeout_seconds\t%s\nvalidation_timeout_seconds\t%s\njobs\t%s\n' \
             "${hornix_timeout}" "${validation_timeout}" "${jobs}"
     } > "${run_dir}/configuration.tsv"
