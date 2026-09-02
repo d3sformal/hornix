@@ -196,6 +196,34 @@ check_local_array_violation_witness() {
   rm -f "${witness}"
 }
 
+check_multiple_target_violation_witness() {
+  local property="${script_dir}/witnesses/unreach-call.prp"
+  local unsafe="${script_dir}/witnesses/multiple_unreach_calls.c"
+  local witness output
+  witness="$(mktemp)"
+
+  output="$(${executable} --integer-theory bitvectors --data-model LP64 --property "${property}" \
+    --witness-format 2.1 --witness-output "${witness}" "${unsafe}" 2>&1)"
+  if [[ "${output}" == unsat* ]] && python3 - "${witness}" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    witness = yaml.safe_load(stream)
+
+location = witness[0]["content"][0]["segment"][0]["waypoint"]["location"]
+assert location == {"file_name": "multiple_unreach_calls.c", "line": 12, "column": 9}
+PY
+  then
+    printf "%-48s ${GREEN}PASS${NC}\n" "Violation witness selects reachable target"
+    ((pass_count++))
+  else
+    printf "%-48s ${RED}FAIL${NC} (%s)\n" "Violation witness selects reachable target" "${output}"
+    ((fail_count++))
+  fi
+  rm -f "${witness}"
+}
+
 check_witness_option_validation() {
   local property="${script_dir}/witnesses/unreach-call.prp"
   local unsafe="${script_dir}/witnesses/unsafe_unreach.c"
@@ -270,6 +298,7 @@ check_local_array_pointer_escape
 check_solver_failure
 check_violation_witness
 check_local_array_violation_witness
+check_multiple_target_violation_witness
 check_witness_option_validation
 check_witness_format_selection
 

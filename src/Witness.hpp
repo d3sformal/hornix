@@ -8,9 +8,16 @@
 #define WITNESS_HPP
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace hornix {
+
+struct ViolationWitnessLocation {
+    std::string file_name;
+    unsigned line;
+    unsigned column;
+};
 
 struct ViolationWitnessConfiguration {
     std::filesystem::path output_file;
@@ -19,6 +26,9 @@ struct ViolationWitnessConfiguration {
     std::string data_model;
     std::string command_line;
     std::string format_version;
+    // Set after selecting one reachable call when the program contains
+    // multiple direct calls to the unreach-call target.
+    std::optional<ViolationWitnessLocation> target_location;
 };
 
 // Validates the currently supported witness subset and writes a YAML 2.2

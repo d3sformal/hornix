@@ -97,12 +97,6 @@ std::string uuidV4() {
     return result.str();
 }
 
-struct SourceLocation {
-    std::string file_name;
-    unsigned line;
-    unsigned column;
-};
-
 std::string maskCommentsAndStrings(std::string const & source) {
     enum class State { Code, LineComment, BlockComment, String, Character };
     std::string result = source;
@@ -198,10 +192,10 @@ bool isPreprocessorDirective(std::string const & source, std::size_t position) {
     return first < source.size() && source[first] == '#';
 }
 
-SourceLocation findTargetCall(fs::path const & source, std::string const & target) {
+std::vector<ViolationWitnessLocation> findTargetCalls(fs::path const & source, std::string const & target) {
     auto const contents = readFile(source);
     auto const code = maskCommentsAndStrings(contents);
-    std::optional<SourceLocation> location;
+    std::vector<ViolationWitnessLocation> locations;
     for (std::size_t position = 0; position + target.size() <= code.size(); ++position) {
         if (code.compare(position, target.size(), target) != 0 ||
             (position > 0 && isIdentifierCharacter(code[position - 1])) ||
@@ -222,16 +216,12 @@ SourceLocation findTargetCall(fs::path const & source, std::string const & targe
         auto const line = static_cast<unsigned>(std::count(contents.begin(), contents.begin() + position, '\n') + 1);
         auto const previous_newline = contents.rfind('\n', position);
         auto const column = static_cast<unsigned>(position - (previous_newline == std::string::npos ? 0 : previous_newline + 1) + 1);
-        if (location.has_value()) {
-            throw std::runtime_error("Violation witness requires an unambiguous direct call to '" + target +
-                                     "'; trace-based selection among multiple calls is not implemented yet.");
-        }
-        location = SourceLocation{source.filename().string(), line, column};
+        locations.push_back(ViolationWitnessLocation{source.filename().string(), line, column});
     }
-    if (!location.has_value()) {
+    if (locations.empty()) {
         throw std::runtime_error("Could not locate a call to '" + target + "' in " + source.string());
     }
-    return location.value();
+    return locations;
 }
 
 std::string hornixConfiguration(ViolationWitnessConfiguration const & configuration) {
@@ -255,7 +245,16 @@ std::string unreachCallTarget(fs::path const & property_file) {
 void writeViolationWitness(ViolationWitnessConfiguration const & configuration) {
     auto const specification = trim(readFile(configuration.property_file));
     auto const target = unreachCallTarget(configuration.property_file);
-    auto const location = findTargetCall(configuration.input_file, target);
+    auto const locations = findTargetCalls(configuration.input_file, target);
+    ViolationWitnessLocation location;
+    if (configuration.target_location.has_value()) {
+        location = configuration.target_location.value();
+    } else if (locations.size() == 1) {
+        location = locations.front();
+    } else {
+        throw std::runtime_error("Could not select a reachable direct call to '" + target +
+                                 "' for violation-witness generation.");
+    }
     auto const input_file_name = configuration.input_file.filename().string();
 
     std::ofstream output(configuration.output_file);

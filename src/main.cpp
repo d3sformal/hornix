@@ -14,11 +14,14 @@
 #include "utils/ScopeGuard.hpp"
 
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include <iostream>
 #include <filesystem>
@@ -69,6 +72,67 @@ std::string commandLine(int argc, char * argv[]) {
         result << argv[index];
     }
     return result.str();
+}
+
+struct DirectTargetCall {
+    std::size_t ordinal;
+    ViolationWitnessLocation location;
+};
+
+std::vector<DirectTargetCall> directTargetCalls(llvm::Module const & module, std::string const & target) {
+    std::vector<DirectTargetCall> calls;
+    for (llvm::Function const & function : module) {
+        for (llvm::BasicBlock const & block : function) {
+            for (llvm::Instruction const & instruction : block) {
+                auto const * call = llvm::dyn_cast<llvm::CallBase>(&instruction);
+                auto const * callee = call ? call->getCalledFunction() : nullptr;
+                if (!callee || callee->getName() != target) { continue; }
+
+                auto const debug_location = call->getDebugLoc();
+                if (!debug_location || debug_location->getLine() == 0 || debug_location->getColumn() == 0) {
+                    throw std::runtime_error("Could not determine the source location of a direct call to '" +
+                                             target + "' for violation-witness generation.");
+                }
+                auto file_name = fs::path(debug_location->getFilename().str()).filename().string();
+                if (file_name.empty()) {
+                    throw std::runtime_error("Could not determine the source file of a direct call to '" + target +
+                                             "' for violation-witness generation.");
+                }
+                calls.push_back(DirectTargetCall{
+                    .ordinal = calls.size(),
+                    .location = ViolationWitnessLocation{
+                        .file_name = std::move(file_name),
+                        .line = debug_location->getLine(),
+                        .column = debug_location->getColumn(),
+                    },
+                });
+            }
+        }
+    }
+    return calls;
+}
+
+void disableOtherTargetCalls(llvm::Module & module, std::string const & target, std::size_t selected_ordinal) {
+    llvm::Function * ignored_target = nullptr;
+    std::size_t ordinal = 0;
+    for (llvm::Function & function : module) {
+        for (llvm::BasicBlock & block : function) {
+            for (llvm::Instruction & instruction : block) {
+                auto * call = llvm::dyn_cast<llvm::CallBase>(&instruction);
+                llvm::Function * callee = call ? call->getCalledFunction() : nullptr;
+                if (!callee || callee->getName() != target) { continue; }
+
+                if (ordinal != selected_ordinal) {
+                    if (!ignored_target) {
+                        ignored_target = llvm::Function::Create(callee->getFunctionType(), llvm::GlobalValue::ExternalLinkage,
+                                                               "__hornix_ignored_error_call", module);
+                    }
+                    call->setCalledFunction(ignored_target);
+                }
+                ++ordinal;
+            }
+        }
+    }
 }
 
 
@@ -164,23 +228,48 @@ int main(int argc, char * argv[]) {
         fatalError("Violation witnesses currently require --integer-theory bitvectors.");
     }
     try {
-        auto chcs = toChc(*module, integerTheory);
-        std::stringstream query_stream;
-        SMTOutput{query_stream, integerTheory}.smt_print_implications(chcs);
+        auto make_query = [&](llvm::Module const & current_module) {
+            auto chcs = toChc(current_module, integerTheory);
+            std::stringstream query_stream;
+            SMTOutput{query_stream, integerTheory}.smt_print_implications(chcs);
+            return query_stream.str();
+        };
+        auto const query = make_query(*module);
         if (options.getOrDefault(Options::PRINT_CHC, "false") == "true") {
-            std::cout << query_stream.str() << std::endl;
+            std::cout << query << std::endl;
             return 0;
         }
 
-        auto res = solve(query_stream.str(),
-            SolverContext::context_for_solver(
-                options.getOrDefault(Options::SOLVER, std::string("z3")),
-                options.getOption(Options::SOLVER_ARGS),
-                options.getOption(Options::SOLVER_DIR)
-            )
+        auto const solver_context = SolverContext::context_for_solver(
+            options.getOrDefault(Options::SOLVER, std::string("z3")),
+            options.getOption(Options::SOLVER_ARGS),
+            options.getOption(Options::SOLVER_DIR)
+        );
+        auto res = solve(query,
+            solver_context
         );
         if (witness_configuration.has_value() && res.rfind("unsat", 0) == 0) {
-            writeViolationWitness(witness_configuration.value());
+            auto configuration = witness_configuration.value();
+            auto const target = unreachCallTarget(configuration.property_file);
+            auto const calls = directTargetCalls(*module, target);
+            if (calls.size() > 1) {
+                bool selected = false;
+                for (DirectTargetCall const & call : calls) {
+                    auto candidate_module = llvm::CloneModule(*module);
+                    disableOtherTargetCalls(*candidate_module, target, call.ordinal);
+                    auto const candidate_result = solve(make_query(*candidate_module), solver_context);
+                    if (candidate_result.rfind("unsat", 0) == 0) {
+                        configuration.target_location = call.location;
+                        selected = true;
+                        break;
+                    }
+                }
+                if (!selected) {
+                    throw std::runtime_error("Could not select a reachable direct call to '" + target +
+                                             "' for violation-witness generation.");
+                }
+            }
+            writeViolationWitness(configuration);
         }
         std::cout << res << std::endl;
         return 0;
